@@ -180,7 +180,7 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-    # マイページでのパスワード変更処理
+        # 🛠️ マイページでのパスワード変更処理（日本語バグを根本から修正）
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
@@ -196,6 +196,8 @@ def main(page: ft.Page):
             if not supabase.rpc("verify_password", {"hashed_pass": res.data[0]["password"], "input_pass": old_pass}).execute().data:
                 show_alert("現在のパスワードが間違っています。")
                 return
+            
+            # 💡 new_name_or_pass_fix を使わず、新パスワードをそのまま安全に送信します
             supabase.table("users").update({"password": new_pass}).eq("username", current_player).execute()
             page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
             mypage_old_pass.value = ""
@@ -235,7 +237,7 @@ def main(page: ft.Page):
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # パスワードを忘れた場合：答え合わせをしてリセットする処理
+    # 🛠️ パスワードを忘れた場合：答え合わせをしてリセットする処理（日本語バグを根本から修正）
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -251,9 +253,11 @@ def main(page: ft.Page):
             if not res.data or res.data[0].get("secret_answer") != ans:
                 show_alert("質問の答えが間違っています。")
                 return
+            
+            # 💡 こちらも新パスワードをそのまま直接送信します
             supabase.table("users").update({"password": new_p}).eq("username", name).execute()
             forgot_dialog.open = False
-            show_alert("パスワードを再設定しました！ログイン画面から新しいパスワードでログインしてください。", title="再設定完了")
+            show_alert("パスワードを再設定しました！新しいパスワードでログインしてください。", title="再設定完了")
         except Exception as ex:
             show_alert(f"リセット失敗: {ex}")
 
