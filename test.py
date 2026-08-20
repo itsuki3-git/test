@@ -473,34 +473,82 @@ def main(page: ft.Page):
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=trigger_forgot_dialog)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10, scroll=ft.ScrollMode.AUTO), padding=20, alignment=ft.alignment.center, height=600, visible=True)
     
     # タブ1: 得点計算
-    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True, scroll=ft.ScrollMode.AUTO)
+    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リreset", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 🛠️ 【順序変更】「過去のゲーム結果」を最上部に配置し、各種設定エリアをその下に並び替え
+    # 🛠️ 【新規追加】マイページ用：名前変更ダイアログ
+    change_name_dialog = ft.AlertDialog(
+        title=ft.Text("👤 プレイヤー名の変更"),
+        content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70),
+        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(change_name_dialog, "open", False)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    # マイページ用：パスワード変更ダイアログ
+    change_pass_dialog = ft.AlertDialog(
+        title=ft.Text("🔒 パスワードの変更"),
+        content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140),
+        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(change_pass_dialog, "open", False)), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    # マイページ用：秘密の質問設定ダイアログ
+    secret_question_dialog = ft.AlertDialog(
+        title=ft.Text("🛡️ 秘密の質問の設定"),
+        content=ft.Container(content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140),
+        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(secret_question_dialog, "open", False)), ft.ElevatedButton("設定を保存", on_click=handle_save_secret_question, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    # ログイン画面用：パスワード忘れた場合の救済ダイアログ
+    forgot_dialog = ft.AlertDialog(
+        title=ft.Text("🔑 パスワードの再設定"),
+        content=ft.Container(content=ft.Column([forgot_name_input, ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input, forgot_new_pass_input], spacing=10, tight=True), width=320, height=325),
+        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(forgot_dialog, "open", False)), ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    def trigger_forgot_dialog(e):
+        forgot_name_input.value, forgot_answer_input.value, forgot_new_pass_input.value = "", "", ""
+        forgot_question_text.value = "プレイヤー名を入力して「質問を確認」を押してください"
+        if forgot_dialog not in page.overlay: page.overlay.append(forgot_dialog)
+        forgot_dialog.open = True
+        page.update()
+
+    def open_mypage_dialog(dialog_component):
+        if dialog_component not in page.overlay: page.overlay.append(dialog_component)
+        dialog_component.open = True
+        page.update()
+
+    # 🛠️ 【順序・レイアウト一新】履歴リストを最上部に広げ、設定ボタン群を最下部に綺麗に集約
     mypage_tab_view = ft.Column(
         controls=[
-            # 1. 過去のゲーム結果一覧（最上部へ移動）
+            # 1. 過去のゲーム結果一覧（最上部に固定して大きく表示）
             ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
-            ft.Container(content=my_records_list, height=200), # 履歴リストエリア
+            ft.Container(content=my_records_list, height=320), # 履歴を広々見せるために高さを320に拡大
             ft.Container(height=10),
             
-            # 2. プロフィール設定・セキュリティ・アカウント削除エリア（下部へ移動）
+            # 2. 画面下部に配置するコンパクトな各種設定ツールバー
             ft.Container(
                 content=ft.Column([
-                    ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400),
-                    ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Divider(height=15, thickness=1),
-                    
-                    # セキュリティ設定ボタン（パスワード変更・秘密の質問）
-                    ft.Row([ft.Text("セキュリティ設定:", size=13, color=ft.Colors.BLUE_GREY_700), ft.Row([ft.IconButton(icon=ft.Icons.LOCK, tooltip="パスワードを変更", on_click=lambda e: open_mypage_dialog(change_pass_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(icon=ft.Icons.SHIELD, tooltip="秘密の質問を設定", on_click=lambda e: open_mypage_dialog(secret_question_dialog), icon_color=ft.Colors.BLUE_600)], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Divider(height=15, thickness=1),
+                    ft.Text("アカウント・セキュリティ設定", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400),
+                    ft.Row([
+                        ft.Text("各種設定を開く:", size=13, color=ft.Colors.BLUE_GREY_700),
+                        # 3つの設定ダイアログ起動ボタンを横並びで配置
+                        ft.Row([
+                            ft.IconButton(icon=ft.Icons.ACCOUNT_CIRCLE, tooltip="プレイヤー名変更", on_click=lambda e: open_mypage_dialog(change_name_dialog), icon_color=ft.Colors.BLUE_600),
+                            ft.IconButton(icon=ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: open_mypage_dialog(change_pass_dialog), icon_color=ft.Colors.BLUE_600),
+                            ft.IconButton(icon=ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: open_mypage_dialog(secret_question_dialog), icon_color=ft.Colors.BLUE_600)
+                        ], spacing=2)
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Divider(height=10, thickness=1),
                     
                     ranking_switch,
-                    ft.Divider(height=15, thickness=1),
+                    ft.Divider(height=10, thickness=1),
                     
                     # アカウント削除
                     ft.Row(controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400), ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS, on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ]),
-                padding=15, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10
+                padding=12, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10
             ),
         ],
         expand=True, scroll=ft.ScrollMode.AUTO
