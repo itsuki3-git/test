@@ -3,41 +3,37 @@ from datetime import datetime
 from supabase import create_client, Client
 
 def main(page: ft.Page):
-    page.title = "フルーツ得点計算 & プレイヤー管理 (Supabase版)"
+    page.title = "フルーツ得点計算 & プレイヤー管理 (パスワード記憶版)"
     page.window_width = 450
     page.window_height = 700
     page.theme_mode = ft.ThemeMode.LIGHT
 
     # --- フルーツの配点設定 ---
-    FRUIT_POINTS = {
-        "apple": 10,
-        "orange": 5,
-        "grape": 15
-    }
+    FRUIT_POINTS = {"apple": 10, "orange": 5, "grape": 15}
 
     # =========================================================================
     # ⚠️【超重要】あなたのSupabaseの情報をここに貼り付けてください
-    # =========================================================================
+    # ==========================================
     SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
 
-    # Supabaseクライアントの初期化
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # --- 状態管理用データ（初期化） ---
-    current_player = None  # 現在ログイン中のプレイヤー名
+    current_player = None
     counts = {"apple": 0, "orange": 0, "grape": 0}
+    
+    # ログイン情報を記憶するためのブラウザ保存キー
+    STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
+    STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
     # --- UIコンポーネントの参照定義 ---
-    login_name_input = ft.TextField(
-        label="プレイヤー名を入力してください", 
-        hint_text="例: たろう"
-    )
+    login_name_input = ft.TextField(label="プレイヤー名を入力してください", hint_text="例: たろう")
+    login_pass_input = ft.TextField(label="パスワードを入力してください", hint_text="4桁以上の英数字など", password=True, can_reveal_password=True)
     
-    # いらなくなったトグル切り替え用ボタンやサブテキストなどの部品を完全削除
-    register_btn = ft.ElevatedButton("登録してゲーム開始", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=250, height=45)
-    login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=250, height=45)
+    register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PERSON_ADD, on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=150, height=45)
+    login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=150, height=45)
     
     logged_in_user_text = ft.Text(value="", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800)
     score_display = ft.Text(value="0", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_600)
@@ -46,32 +42,26 @@ def main(page: ft.Page):
     orange_count_text = ft.Text(value="0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER)
     grape_count_text = ft.Text(value="0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER)
     
-    # 各種リスト用・設定用コンポーネント
     edit_name_input = ft.TextField(label="名前を編集", hint_text="新しい名前を入力", expand=True)
     ranking_switch = ft.Switch(label="ランキングに名前と記録を表示する", value=True, on_change=lambda e: handle_privacy_change(e))
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # --- エラー通知用の通常ダイアログ ---
+    # 通常ダイアログ
     def close_dialog(e):
         alert_dialog.open = False
         page.update()
 
-    alert_dialog = ft.AlertDialog(
-        title=ft.Text("メッセージ"),
-        content=ft.Text(""),
-        actions=[ft.TextButton("OK", on_click=close_dialog)]
-    )
+    alert_dialog = ft.AlertDialog(title=ft.Text("メッセージ"), content=ft.Text(""), actions=[ft.TextButton("OK", on_click=close_dialog)])
 
     def show_alert(message, title="エラー"):
         alert_dialog.title.value = title
         alert_dialog.content.value = message
-        if alert_dialog not in page.overlay:
-            page.overlay.append(alert_dialog)
+        if alert_dialog not in page.overlay: page.overlay.append(alert_dialog)
         alert_dialog.open = True
         page.update()
 
-    # --- アカウント削除前の注意・確認用ダイアログ ---
+    # アカウント削除確認ダイアログ
     def cancel_delete(e):
         confirm_delete_dialog.open = False
         page.update()
@@ -83,56 +73,79 @@ def main(page: ft.Page):
     confirm_delete_dialog = ft.AlertDialog(
         title=ft.Text("⚠️ 最終確認"),
         content=ft.Text("本当にアカウントを削除しますか？\n過去のゲーム記録もすべて消去され、元に戻すことはできません。"),
-        actions=[
-            ft.TextButton("キャンセル", on_click=cancel_delete),
-            ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete),
-        ],
+        actions=[ft.TextButton("キャンセル", on_click=cancel_delete), ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete)],
         actions_alignment=ft.MainAxisAlignment.END,
     )
 
     def trigger_delete_confirmation(e):
-        if confirm_delete_dialog not in page.overlay:
-            page.overlay.append(confirm_delete_dialog)
+        if confirm_delete_dialog not in page.overlay: page.overlay.append(confirm_delete_dialog)
         confirm_delete_dialog.open = True
         page.update()
 
-    # 既存ユーザーのログイン
+    # 既存ユーザーのログイン（パスワード検証機能付き）
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
-        if not input_name:
-            show_alert("プレイヤー名を入力してください。")
+        input_pass = login_pass_input.value.strip()
+
+        if not input_name or not input_pass:
+            show_alert("プレイヤー名とパスワードを入力してください。")
             return
+
         try:
-            res = supabase.table("users").select("username").eq("username", input_name).execute()
+            # 名前とパスワードが一致するユーザーをSupabaseから検索
+            res = supabase.table("users").select("username").eq("username", input_name).eq("password", input_pass).execute()
             if not res.data:
-                show_alert("その名前は登録されていません。新しく始める場合は「新規登録」を押してください。")
+                show_alert("名前またはパスワードが間違っています。")
                 return
+
+            # ログイン情報をこの端末（ブラウザ）に記憶する
+            page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
+            page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
+
+            # プライバシー設定のロード
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
             ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
+
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
-    # 新規プレイヤーの登録
+    # 新規プレイヤーの登録（パスワード設定付き）
     def handle_new_register(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
-        if not input_name:
-            show_alert("プレイヤー名を入力してください。")
+        input_pass = login_pass_input.value.strip()
+
+        if not input_name or not input_pass:
+            show_alert("プレイヤー名とパスワードを入力してください。")
             return
+        if len(input_pass) < 4:
+            show_alert("パスワードは4桁以上で入力してください。")
+            return
+
         try:
+            # 名前の重複チェック
             res = supabase.table("users").select("username").eq("username", input_name).execute()
             if res.data:
                 show_alert("その名前はすでに使用されています。")
                 return
-            supabase.table("users").insert({"username": input_name}).execute()
+
+            # Supabaseにパスワード付きで新規登録
+            supabase.table("users").insert({"username": input_name, "password": input_pass}).execute()
             supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
+            
+            # 新規登録時もログイン情報をブラウザに記憶
+            page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
+            page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
+
         except Exception as ex:
             show_alert(f"登録エラー: {ex}")
             return
+
         enter_game_session(input_name, f"🎉 新しいプレイヤー {input_name} さんを登録しました！")
 
     # セッション開始共通処理
@@ -141,13 +154,34 @@ def main(page: ft.Page):
         current_player = username
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
+        
         login_name_input.value = ""
+        login_pass_input.value = ""
         login_view.visible = False
         main_tab_view.visible = True
         reset_current_game(None)
         update_all_uis()
+        
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
+
+    # 自動ログイン処理（起動時にブラウザの記憶をチェックする）
+    def check_auto_login():
+        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
+        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
+
+        if saved_user and saved_pass:
+            try:
+                # 記憶されているパスワードが今も正しいかSupabase側を最終確認
+                res = supabase.table("users").select("username").eq("username", saved_user).eq("password", saved_pass).execute()
+                if res.data:
+                    priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+                    enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
+            except Exception:
+                # 万が一通信エラーやデータベース側で消されていた場合は記憶を消去して通常ログイン画面へ
+                page.client_storage.remove(STORAGE_REMEMBER_USER)
+                page.client_storage.remove(STORAGE_REMEMBER_PASS)
 
     # 名前の変更処理
     def handle_rename(e):
@@ -161,6 +195,8 @@ def main(page: ft.Page):
                 show_alert("その名前はすでに使用されています。")
                 return
             supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
+            # 端末に記憶している名前も新しいものに更新
+            page.client_storage.set(STORAGE_REMEMBER_USER, new_name)
         except Exception as ex:
             show_alert(f"名前変更失敗: {ex}")
             return
@@ -172,8 +208,7 @@ def main(page: ft.Page):
 
     # 非表示設定（トグルの切り替え）
     def handle_privacy_change(e):
-        if not current_player:
-            return
+        if not current_player: return
         try:
             supabase.table("privacy").update({"is_visible": e.control.value}).eq("username", current_player).execute()
         except Exception as ex:
@@ -183,8 +218,7 @@ def main(page: ft.Page):
     # アカウント完全削除の実処理
     def execute_delete_account():
         nonlocal current_player
-        if not current_player:
-            return
+        if not current_player: return
         try:
             supabase.table("users").delete().eq("username", current_player).execute()
         except Exception as ex:
@@ -194,6 +228,11 @@ def main(page: ft.Page):
         current_player = None
         login_view.visible = True
         main_tab_view.visible = False
+        
+        # アカウント削除時は端末の自動ログイン記憶も完全に抹消する
+        page.client_storage.remove(STORAGE_REMEMBER_USER)
+        page.client_storage.remove(STORAGE_REMEMBER_PASS)
+        
         update_all_uis()
         show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
 
@@ -203,6 +242,10 @@ def main(page: ft.Page):
         current_player = None
         login_view.visible = True
         main_tab_view.visible = False
+        
+        # ★ポイント：ログアウトボタンを押したときは、次回自動ログインさせずに手動入力を求めるため、記憶を抹消します
+        page.client_storage.remove(STORAGE_REMEMBER_USER)
+        page.client_storage.remove(STORAGE_REMEMBER_PASS)
         page.update()
 
     # 合計得点の計算・更新
@@ -226,7 +269,6 @@ def main(page: ft.Page):
     def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
-
 
     # マイページ（自分だけの記録）の描画更新
     def update_my_records_ui():
@@ -272,7 +314,7 @@ def main(page: ft.Page):
                 ranking_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60), ft.Column([ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)], expand=True), ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE))
         page.update()
 
-    # ゲームリresetと保存
+    # ゲームリセットと保存
     def reset_current_game(e):
         for fruit in counts: counts[fruit] = 0
         apple_count_text.value, orange_count_text.value, grape_count_text.value = "0", "0", "0"
@@ -309,8 +351,8 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # 全体ビュー配置
-    login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
+    # 全体ビュー配置 (パスワード入力欄を追加)
+    login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
     mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Column([ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400), ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN), ft.Divider(height=10, thickness=1), ranking_switch, ft.Divider(height=10, thickness=1), ft.Row(controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400), ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS, on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)]), padding=15, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10), ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)), ft.Container(content=my_records_list, expand=True)], expand=True)
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)], expand=True)
@@ -319,9 +361,14 @@ def main(page: ft.Page):
 
     calculate_total_score()
     update_all_uis()
+
+    # ★最重要：起動時にブラウザの記憶をチェックし、あればパスワード画面を飛ばしてログイン
+    check_auto_login()
+
     page.add(login_view, main_tab_view)
-    
+
 if __name__ == "__main__":
     import os
+
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
