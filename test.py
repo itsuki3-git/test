@@ -460,36 +460,48 @@ def main(page: ft.Page):
         dialog_component.open = True
         page.update()
 
-    # ログイン画面の横並びボタン
-    action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
+        # 画面自動幅調整の横並びボタン
+    action_buttons_row = ft.ResponsiveRow(
+        controls=[
+            ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
+            ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
+        ],
+        alignment=ft.MainAxisAlignment.CENTER
+    )
 
-    # 🛠️ ログイン画面もスマホ対応のため height=600 に固定します
+    # ログイン・登録画面全体のレイアウト
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=trigger_forgot_dialog)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10, scroll=ft.ScrollMode.AUTO), padding=20, alignment=ft.alignment.center, height=600, visible=True)
- 
+    
     # タブ1: 得点計算
     calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # タブ2: マイページ (ダイアログ起動ボタンに変更・スクロール強化)
+    # 🛠️ 【順序変更】「過去のゲーム結果」を最上部に配置し、各種設定エリアをその下に並び替え
     mypage_tab_view = ft.Column(
         controls=[
+            # 1. 過去のゲーム結果一覧（最上部へ移動）
+            ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
+            ft.Container(content=my_records_list, height=200), # 履歴リストエリア
+            ft.Container(height=10),
+            
+            # 2. プロフィール設定・セキュリティ・アカウント削除エリア（下部へ移動）
             ft.Container(
                 content=ft.Column([
                     ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400),
                     ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ft.Divider(height=15, thickness=1),
                     
-                    # ボタンレイアウト
+                    # セキュリティ設定ボタン（パスワード変更・秘密の質問）
                     ft.Row([ft.Text("セキュリティ設定:", size=13, color=ft.Colors.BLUE_GREY_700), ft.Row([ft.IconButton(icon=ft.Icons.LOCK, tooltip="パスワードを変更", on_click=lambda e: open_mypage_dialog(change_pass_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(icon=ft.Icons.SHIELD, tooltip="秘密の質問を設定", on_click=lambda e: open_mypage_dialog(secret_question_dialog), icon_color=ft.Colors.BLUE_600)], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ft.Divider(height=15, thickness=1),
                     
                     ranking_switch,
                     ft.Divider(height=15, thickness=1),
+                    
+                    # アカウント削除
                     ft.Row(controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400), ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS, on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 ]),
                 padding=15, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10
             ),
-            ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
-            ft.Container(content=my_records_list, expand=True)
         ],
         expand=True, scroll=ft.ScrollMode.AUTO
     )
@@ -497,7 +509,7 @@ def main(page: ft.Page):
     # タブ3: ランキング
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 🛠️ スマホでの画面潰れバグを回避するため、height=600 に固定し、expandを削除します
+    # メインタブ
     main_tab_view = ft.Tabs(
         selected_index=0, 
         animation_duration=300, 
@@ -513,11 +525,9 @@ def main(page: ft.Page):
     calculate_total_score()
     update_all_uis()
 
-    # オートコンプリート用の読み込み
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
 
-    # 自動ログインチェック
     check_auto_login()
     page.add(login_view, main_tab_view)
 
