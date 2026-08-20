@@ -188,24 +188,33 @@ def main(page: ft.Page):
             show_alert(f"設定の保存に失敗しました。\n詳細: {ex}")
         update_ranking_ui()
 
-    # アカウント完全削除の実処理
+        # --- アカウント完全削除の実処理（削除後も2つのボタンを確実に常時表示） ---
     def execute_delete_account():
         nonlocal current_player
         if not current_player:
             return
+
         try:
+            # Supabaseからユーザーを削除
             supabase.table("users").delete().eq("username", current_player).execute()
         except Exception as ex:
             show_alert(f"アカウントの削除に失敗しました。\n詳細: {ex}")
             return
+
         deleted_name = current_player
         current_player = None
+        
+        # ログイン画面を表示状態に戻し、計算画面を隠す
         login_view.visible = True
         main_tab_view.visible = False
-        page.client_storage.remove(STORAGE_FIRST_VISIT_KEY)
-        toggle_login_mode(False)
+        
+        # ボタンが消えてしまわないよう確実に再表示させる
+        register_btn.visible = True
+        login_btn.visible = True
+        
         update_all_uis()
         show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
+
 
     # --- ログアウト処理（2つのボタンが確実に常時表示されるように修正） ---
     def handle_logout(e):
