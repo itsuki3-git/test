@@ -82,7 +82,7 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
-        # 既存ユーザーのログイン（パスワード検証機能付き）
+    # 既存ユーザーのログイン（Supabase内の暗号化パスワードと正しく照合）
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -93,12 +93,24 @@ def main(page: ft.Page):
             return
 
         try:
-            res = supabase.table("users").select("username").eq("username", input_name).eq("password", input_pass).execute()
+            # 1. まずはユーザー名が存在するかだけをチェック
+            res = supabase.table("users").select("username, password").eq("username", input_name).execute()
             if not res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
+            
+            # 2. データベースに保管されている暗号化されたパスワードを取得
+            stored_hashed_pass = res.data[0]["password"]
 
-            # ★ログイン成功時にブラウザのストレージへ情報を確実に記憶
+            # 3. 入力された生のパスワードが、暗号化データと一致するかSupabase側（RPC経由）で関数を回して検証
+            # ※SQLEditorでこれから実行する照合用関数（verify_password）を利用します
+            check_res = supabase.rpc("verify_password", {"input_pass": input_pass, "hashed_pass": stored_hashed_pass}).execute()
+            
+            if not check_res.data:
+                show_alert("名前またはパスワードが間違っています。")
+                return
+
+            # ログイン成功時にブラウザに記憶
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
@@ -133,7 +145,6 @@ def main(page: ft.Page):
             supabase.table("users").insert({"username": input_name, "password": input_pass}).execute()
             supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
             
-            # ★新規登録時にもログイン情報をブラウザに記憶
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
@@ -166,11 +177,14 @@ def main(page: ft.Page):
 
         if saved_user and saved_pass:
             try:
-                res = supabase.table("users").select("username").eq("username", saved_user).eq("password", saved_pass).execute()
+                res = supabase.table("users").select("username, password").eq("username", saved_user).execute()
                 if res.data:
-                    priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
-                    enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
+                    stored_hashed_pass = res.data[0]["password"]
+                    check_res = supabase.rpc("verify_password", {"input_pass": saved_pass, "hashed_pass": stored_hashed_pass}).execute()
+                    if check_res.data:
+                        priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                        ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+                        enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
 
@@ -217,7 +231,6 @@ def main(page: ft.Page):
         deleted_name = current_player
         current_player = None
         
-        # 記憶を完全に消去して初期フォームに戻す
         page.client_storage.remove(STORAGE_REMEMBER_USER)
         page.client_storage.remove(STORAGE_REMEMBER_PASS)
         login_name_input.value = ""
@@ -228,12 +241,11 @@ def main(page: ft.Page):
         update_all_uis()
         show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
 
-    # ★修正：ログアウトボタンを押しても、手元の記憶は消さずに残す
+    # ログアウト処理
     def handle_logout(e):
         nonlocal current_player
         current_player = None
         
-        # 記憶していた名前とパスワードを最初から入力ボックスに代入しておく
         login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
         login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
         
@@ -261,6 +273,8 @@ def main(page: ft.Page):
     # UI全体の一括描画更新
     def update_all_uis():
         update_my_records_ui()
+        update_ranking_ui()
+
         update_ranking_ui()
 
     # マイページ（自分だけの記録）の描画更新
