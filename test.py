@@ -71,12 +71,18 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = False
         execute_delete_account()
 
+    # --- アカウント削除前の注意・確認用ダイアログ (キャンセルバグ修正版) ---
     confirm_delete_dialog = ft.AlertDialog(
         title=ft.Text("⚠️ 最終確認"),
         content=ft.Text("本当にアカウントを削除しますか？\n過去のゲーム記録もすべて消去され、元に戻すことはできません。"),
-        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(confirm_delete_dialog, "open", False)), ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete)],
+        actions=[
+            # 💡 キャンセルを押した瞬間に、開くフラグをFalseにして即座に画面を最新状態に更新します
+            ft.TextButton("キャンセル", on_click=lambda e: (setattr(confirm_delete_dialog, "open", False), page.update())), 
+            ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete)
+        ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
+
 
     def trigger_delete_confirmation(e):
         if confirm_delete_dialog not in page.overlay: page.overlay.append(confirm_delete_dialog)
