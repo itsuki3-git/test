@@ -179,7 +179,7 @@ def main(page: ft.Page):
                 pass
 
 
-    # マイページ：パスワード変更ダイアログの実行処理
+        # マイページでのパスワード変更処理
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
@@ -201,12 +201,12 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
             mypage_old_pass.value = ""
             mypage_new_pass.value = ""
-            change_pass_dialog.open = False
+            change_pass_dialog.open = False # ダイアログを閉じる
             show_alert("パスワードを変更しました！", title="成功")
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
 
-    # マイページ：秘密の質問保存ダイアログの実行処理
+    # マイページでの秘密の質問と答えの保存処理
     def handle_save_secret_question(e):
         q = mypage_question_input.value.strip()
         a = mypage_answer_input.value.strip()
@@ -215,7 +215,7 @@ def main(page: ft.Page):
             return
         try:
             supabase.table("users").update({"secret_question": q, "secret_answer": a}).eq("username", current_player).execute()
-            secret_question_dialog.open = False
+            secret_question_dialog.open = False # ダイアログを閉じる
             show_alert("秘密の質問と答えを保存しました！", title="成功")
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
@@ -272,7 +272,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"リセット失敗: {ex}")
 
-    # 名前の変更処理
+    # 名前の変更処理 (★名前変更ダイアログを自動で閉じるように修正)
     def handle_rename(e):
         nonlocal current_player
         new_name = edit_name_input.value.strip()
@@ -290,7 +290,7 @@ def main(page: ft.Page):
         current_player = new_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         update_all_uis()
-        change_name_dialog.open = False
+        change_name_dialog.open = False # ダイアログを確実に閉じる
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
@@ -301,7 +301,7 @@ def main(page: ft.Page):
         except Exception: pass
         update_ranking_ui()
 
-    # アカウント完全削除
+    # アカウント完全削除 (★確認用の警告アラートを自動で閉じるように修正)
     def execute_delete_account():
         nonlocal current_player
         if not current_player: return
@@ -310,6 +310,8 @@ def main(page: ft.Page):
         page.client_storage.remove(STORAGE_REMEMBER_USER)
         page.client_storage.remove(STORAGE_REMEMBER_PASS)
         login_name_input.value, login_pass_input.value = "", ""
+        
+        confirm_delete_dialog.open = False # 警告画面を確実に閉じる
         login_view.visible, main_tab_view.visible = True, False
         update_all_uis()
 
@@ -340,6 +342,7 @@ def main(page: ft.Page):
     def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
+
 
     # マイページ（自分だけの記録）の描画更新
     def update_my_records_ui():
