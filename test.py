@@ -263,7 +263,6 @@ def main(page: ft.Page):
         update_my_records_ui()
         update_ranking_ui()
 
-
     # マイページ（自分だけの記録）の描画更新
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -345,7 +344,7 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # 全体ビュー配置 (パスワード入力欄を追加)
+    # 全体ビュー配置
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
     mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Column([ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400), ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN), ft.Divider(height=10, thickness=1), ranking_switch, ft.Divider(height=10, thickness=1), ft.Row(controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400), ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS, on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)]), padding=15, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10), ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)), ft.Container(content=my_records_list, expand=True)], expand=True)
@@ -356,10 +355,15 @@ def main(page: ft.Page):
     calculate_total_score()
     update_all_uis()
 
-    # ★最重要：起動時にブラウザの記憶をチェックし、あればパスワード画面を飛ばしてログイン
+    # ★追加：ログイン画面の初期表示時に、ブラウザが記憶している名前とパスワードを自動セットする
+    login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
+    login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
+
+    # 起動時に自動ログインできるかチェック（成功すれば画面をスキップ）
     check_auto_login()
 
     page.add(login_view, main_tab_view)
+
 
 if __name__ == "__main__":
     import os
