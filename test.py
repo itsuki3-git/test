@@ -100,9 +100,9 @@ def main(page: ft.Page):
             
             stored_hashed_pass = res.data[0]["password"] # ※Fletの仕様に合わせ[0]を追加して安全に取得
 
-            # ★引数の順番を「input_pass」➔「hashed_pass」の順に修正
-            check_res = supabase.rpc("verify_password", {"input_pass": input_pass, "hashed_pass": stored_hashed_pass}).execute()
-            
+            # 既存ユーザーのログイン関数（中盤パート②の中）
+            check_res = supabase.rpc("verify_password", {"hashed_pass": stored_hashed_pass, "input_pass": input_pass}).execute()
+         
             if not check_res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
@@ -130,8 +130,8 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username, password").eq("username", saved_user).execute()
                 if res.data:
                     stored_hashed_pass = res.data[0]["password"]
-                    # ★こちらも順番を正しく修正
-                    check_res = supabase.rpc("verify_password", {"input_pass": saved_pass, "hashed_pass": stored_hashed_pass}).execute()
+                    # 自動ログイン関数（中盤パート②の中）
+                    check_res = supabase.rpc("verify_password", {"hashed_pass": stored_hashed_pass, "input_pass": saved_pass}).execute()
                     if check_res.data:
                         priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
                         ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
