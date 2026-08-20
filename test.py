@@ -39,7 +39,7 @@ def main(page: ft.Page):
         label="パスワード",
         hint_text="登録・ログイン共通",
         password=True,
-        can_reveal_password=True,
+        can_reveal_password=FALSE,
         on_submit=lambda e: handle_auth(None)
     )
 
