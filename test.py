@@ -400,11 +400,12 @@ def main(page: ft.Page):
 
     calculate_total_score()
 
-    # 起動時に初訪問か判定して画面を初期化
-    if has_visited:
+    # 起動時に初訪問か判定して画面を初期化 (エラー回避版)
+    if page.client_storage.get(STORAGE_FIRST_VISIT_KEY):
         toggle_login_mode(True)
     else:
         toggle_login_mode(False)
+
 
     update_all_uis()
     page.add(login_view, main_tab_view)
