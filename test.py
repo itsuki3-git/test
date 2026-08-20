@@ -82,7 +82,7 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
-    # 既存ユーザーのログイン（Supabase内の暗号化パスワードと正しく照合）
+        # 既存ユーザーのログイン（rpcの引数の順番を完全に修正）
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -93,35 +93,52 @@ def main(page: ft.Page):
             return
 
         try:
-            # 1. まずはユーザー名が存在するかだけをチェック
             res = supabase.table("users").select("username, password").eq("username", input_name).execute()
             if not res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
             
-            # 2. データベースに保管されている暗号化されたパスワードを取得
-            stored_hashed_pass = res.data[0]["password"]
+            stored_hashed_pass = res.data[0]["password"] # ※Fletの仕様に合わせ[0]を追加して安全に取得
 
-            # 3. 入力された生のパスワードが、暗号化データと一致するかSupabase側（RPC経由）で関数を回して検証
-            # ※SQLEditorでこれから実行する照合用関数（verify_password）を利用します
+            # ★引数の順番を「input_pass」➔「hashed_pass」の順に修正
             check_res = supabase.rpc("verify_password", {"input_pass": input_pass, "hashed_pass": stored_hashed_pass}).execute()
             
             if not check_res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
 
-            # ログイン成功時にブラウザに記憶
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
 
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
 
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
+
+
+    # 自動ログイン処理（こちらも同様にrpcの引数を修正）
+    def check_auto_login():
+        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
+        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
+
+        if saved_user and saved_pass:
+            try:
+                res = supabase.table("users").select("username, password").eq("username", saved_user).execute()
+                if res.data:
+                    stored_hashed_pass = res.data[0]["password"]
+                    # ★こちらも順番を正しく修正
+                    check_res = supabase.rpc("verify_password", {"input_pass": saved_pass, "hashed_pass": stored_hashed_pass}).execute()
+                    if check_res.data:
+                        priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                        ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+                        enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
+            except Exception:
+                pass
+
 
     # 新規プレイヤーの登録
     def handle_new_register(e):
@@ -170,23 +187,6 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
 
-    # 自動ログイン処理
-    def check_auto_login():
-        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
-        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
-
-        if saved_user and saved_pass:
-            try:
-                res = supabase.table("users").select("username, password").eq("username", saved_user).execute()
-                if res.data:
-                    stored_hashed_pass = res.data[0]["password"]
-                    check_res = supabase.rpc("verify_password", {"input_pass": saved_pass, "hashed_pass": stored_hashed_pass}).execute()
-                    if check_res.data:
-                        priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                        ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
-                        enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
-            except Exception:
-                pass
 
     # 名前の変更処理
     def handle_rename(e):
