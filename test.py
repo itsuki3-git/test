@@ -23,13 +23,13 @@ def main(page: ft.Page):
     STORAGE_USERS_KEY = "fruit_app_registered_users"
     STORAGE_RECORDS_KEY = "fruit_app_saved_records"
     STORAGE_COUNTER_KEY = "fruit_app_record_id_counter"
-    STORAGE_PRIVACY_KEY = "fruit_app_privacy_settings"  # 非表示設定用のキー
+    STORAGE_PRIVACY_KEY = "fruit_app_privacy_settings"
 
     # ブラウザのストレージからデータをロード
     registered_users = page.client_storage.get(STORAGE_USERS_KEY) or []
     saved_records = page.client_storage.get(STORAGE_RECORDS_KEY) or []
     record_id_counter = page.client_storage.get(STORAGE_COUNTER_KEY) or 0
-    privacy_settings = page.client_storage.get(STORAGE_PRIVACY_KEY) or {}  # {"ユーザー名": bool(表示するか)}
+    privacy_settings = page.client_storage.get(STORAGE_PRIVACY_KEY) or {}
 
     # --- UIコンポーネントの参照定義 ---
     login_name_input = ft.TextField(
@@ -52,7 +52,7 @@ def main(page: ft.Page):
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # --- 確認・エラーダイアログの制御 ---
+    # --- エラー通知用の通常ダイアログ ---
     def close_dialog(e):
         alert_dialog.open = False
         page.update()
@@ -69,6 +69,32 @@ def main(page: ft.Page):
         if alert_dialog not in page.overlay:
             page.overlay.append(alert_dialog)
         alert_dialog.open = True
+        page.update()
+
+    # --- ★追加：アカウント削除前の注意・確認用ダイアログ★ ---
+    def cancel_delete(e):
+        confirm_delete_dialog.open = False
+        page.update()
+
+    def confirm_delete(e):
+        confirm_delete_dialog.open = False
+        execute_delete_account()  # キャンセルされなかった場合のみ実際の削除処理を実行
+
+    confirm_delete_dialog = ft.AlertDialog(
+        title=ft.Text("⚠️ 最終確認"),
+        content=ft.Text(
+            "本当にアカウントを削除しますか？\nこのプレイヤーの過去のゲーム記録もすべて消去され、元に戻すことはできません。"),
+        actions=[
+            ft.TextButton("キャンセル", on_click=cancel_delete),
+            ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+
+    def trigger_delete_confirmation(e):
+        if confirm_delete_dialog not in page.overlay:
+            page.overlay.append(confirm_delete_dialog)
+        confirm_delete_dialog.open = True
         page.update()
 
     # --- ログイン / 新規登録 処理 ---
@@ -91,7 +117,6 @@ def main(page: ft.Page):
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
 
-        # プライバシー設定の初期化（デフォルトは表示ON）
         if current_player not in privacy_settings:
             privacy_settings[current_player] = True
         ranking_switch.value = privacy_settings[current_player]
@@ -121,18 +146,15 @@ def main(page: ft.Page):
             show_alert("その名前はすでに使用されています。")
             return
 
-        # ユーザー名簿の更新
         if current_player in registered_users:
             registered_users.remove(current_player)
         registered_users.append(new_name)
         page.client_storage.set(STORAGE_USERS_KEY, registered_users)
 
-        # プライバシー設定（非表示スイッチの設定）の引き継ぎ
         old_privacy = privacy_settings.pop(current_player, True)
         privacy_settings[new_name] = old_privacy
         page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
 
-        # 過去のゲーム記録の名前を一括書き換え
         for record in saved_records:
             if record["player"] == current_player:
                 record["player"] = new_name
@@ -151,15 +173,14 @@ def main(page: ft.Page):
             return
         privacy_settings[current_player] = ranking_switch.value
         page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
-        update_ranking_ui()  # ランキング画面を即座に再計算して更新
+        update_ranking_ui()
 
-    # --- アカウント完全削除処理 ---
-    def handle_delete_account(e):
+    # --- アカウント完全削除の実処理（確認後に呼ばれる） ---
+    def execute_delete_account():
         nonlocal current_player, saved_records
         if not current_player:
             return
 
-        # 1. 名簿とプライバシー設定から削除
         if current_player in registered_users:
             registered_users.remove(current_player)
         page.client_storage.set(STORAGE_USERS_KEY, registered_users)
@@ -167,7 +188,6 @@ def main(page: ft.Page):
         privacy_settings.pop(current_player, None)
         page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
 
-        # 2. ゲーム記録を完全削除
         saved_records = [r for r in saved_records if r["player"] != current_player]
         page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
 
@@ -257,12 +277,9 @@ def main(page: ft.Page):
                 )
         page.update()
 
-    # --- ランキング（非表示設定のユーザーを除外してハイスコア順に表示）の描画更新 ---
+    # --- ランキングの描画更新 ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-
-        # ★ここがポイント：プライバシー設定がON（True）のプレイヤーの記録だけを抽出★
-        # 設定データがないプレイヤーはデフォルトで表示（True）とみなします
         visible_records = [r for r in saved_records if privacy_settings.get(r["player"], True) == True]
 
         if not visible_records:
@@ -312,7 +329,7 @@ def main(page: ft.Page):
                 )
         page.update()
 
-    # --- 現在のゲームをリセット ---
+    # --- 現在のゲームをリreset ---
     def reset_current_game(e):
         for fruit in counts:
             counts[fruit] = 0
@@ -411,7 +428,7 @@ def main(page: ft.Page):
                 login_name_input,
                 ft.Container(height=10),
                 ft.ElevatedButton(
-                    "登録してゲーム開始", 
+                    "登録してゲーム開始",
                     icon=ft.Icons.PLAY_ARROW,
                     on_click=handle_login,
                     bgcolor=ft.Colors.BLUE,
@@ -438,8 +455,8 @@ def main(page: ft.Page):
                     controls=[
                         logged_in_user_text,
                         ft.TextButton(
-                            "ログアウト", 
-                            icon=ft.Icons.LOGOUT, 
+                            "ログアウト",
+                            icon=ft.Icons.LOGOUT,
                             style=ft.ButtonStyle(
                                 color=ft.Colors.RED_600,
                                 icon_color=ft.Colors.RED_600
@@ -474,16 +491,16 @@ def main(page: ft.Page):
                 content=ft.Row(
                     controls=[
                         ft.OutlinedButton(
-                            "リセット", 
-                            icon=ft.Icons.REFRESH, 
-                            on_click=reset_current_game, 
+                            "リセット",
+                            icon=ft.Icons.REFRESH,
+                            on_click=reset_current_game,
                             style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)
                         ),
                         ft.ElevatedButton(
-                            "ゲーム記録を保存", 
-                            icon=ft.Icons.SAVE, 
-                            on_click=save_current_game, 
-                            bgcolor=ft.Colors.GREEN_700, 
+                            "ゲーム記録を保存",
+                            icon=ft.Icons.SAVE,
+                            on_click=save_current_game,
+                            bgcolor=ft.Colors.GREEN_700,
                             color=ft.Colors.WHITE
                         ),
                     ],
@@ -505,7 +522,7 @@ def main(page: ft.Page):
                         controls=[
                             edit_name_input,
                             ft.ElevatedButton(
-                                "名前を変更", 
+                                "名前を変更",
                                 icon=ft.Icons.EDIT,
                                 on_click=handle_rename,
                                 bgcolor=ft.Colors.BLUE_600,
@@ -519,14 +536,14 @@ def main(page: ft.Page):
                     # プライバシー設定（ランキング表示ON/OFFスイッチ）
                     ranking_switch,
                     ft.Divider(height=10, thickness=1),
-                    # アカウント削除エリア
+                    # アカウント削除エリア（★確認ダイアログ用の関数を呼び出すように修正★）
                     ft.Row(
                         controls=[
                             ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400),
                             ft.ElevatedButton(
                                 "アカウントを削除する",
                                 icon=ft.Icons.DANGEROUS,
-                                on_click=handle_delete_account,
+                                on_click=trigger_delete_confirmation,
                                 bgcolor=ft.Colors.RED_600,
                                 color=ft.Colors.WHITE,
                                 style=ft.ButtonStyle(padding=8)
@@ -579,7 +596,8 @@ def main(page: ft.Page):
     update_all_uis()
 
     page.add(login_view, main_tab_view)
-
+    
+    
 if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8000))
