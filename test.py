@@ -416,39 +416,55 @@ def main(page: ft.Page):
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(content=ft.Row(controls=[ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True), ft.Row(controls=[ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)), count_text_component, ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE)
 
-    # マイページ用：ダイアログ各種
+        # マイページ用：名前変更ダイアログ
     change_name_dialog = ft.AlertDialog(
         title=ft.Text("👤 プレイヤー名の変更"),
         content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70),
-        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(change_name_dialog, "open", False)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_name_dialog, "open", False), page.update())), 
+            ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
+        ],
         actions_alignment=ft.MainAxisAlignment.END
     )
 
+    # マイページ用：パスワード変更ダイアログ
     change_pass_dialog = ft.AlertDialog(
         title=ft.Text("🔒 パスワードの変更"),
         content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140),
-        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(change_pass_dialog, "open", False)), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_pass_dialog, "open", False), page.update())), 
+            ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
+        ],
         actions_alignment=ft.MainAxisAlignment.END
     )
 
+    # マイページ用：秘密の質問設定ダイアログ
     secret_question_dialog = ft.AlertDialog(
         title=ft.Text("🛡️ 秘密の質問の設定"),
         content=ft.Container(content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140),
-        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(secret_question_dialog, "open", False)), ft.ElevatedButton("設定を保存", on_click=handle_save_secret_question, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: (setattr(secret_question_dialog, "open", False), page.update())), 
+            ft.ElevatedButton("設定を保存", on_click=handle_save_secret_question, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)
+        ],
         actions_alignment=ft.MainAxisAlignment.END
     )
 
+    # マイページ用：ランキング公開設定ダイアログ（閉じるボタンを修正）
     privacy_setting_dialog = ft.AlertDialog(
         title=ft.Text("👁️ プライバシー設定"),
         content=ft.Container(content=ft.Column([ft.Text("スコアを全体のランキングに公開するかどうかを切り替えます。", size=14, color=ft.Colors.GREY_700), ft.Container(height=5), ranking_switch], spacing=10, tight=True), width=320, height=100),
-        actions=[ft.ElevatedButton("閉じる", on_click=lambda e: setattr(privacy_setting_dialog, "open", False), bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
+        actions=[ft.ElevatedButton("閉じる", on_click=lambda e: (setattr(privacy_setting_dialog, "open", False), page.update()), bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
         actions_alignment=ft.MainAxisAlignment.END
     )
 
+    # ログイン画面用：パスワード忘れた場合の救済ダイアログ
     forgot_dialog = ft.AlertDialog(
         title=ft.Text("🔑 パスワードの再設定"),
         content=ft.Container(content=ft.Column([forgot_name_input, ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input, forgot_new_pass_input], spacing=10, tight=True), width=320, height=325),
-        actions=[ft.TextButton("キャンセル", on_click=lambda e: setattr(forgot_dialog, "open", False)), ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: (setattr(forgot_dialog, "open", False), page.update())), 
+            ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+        ],
         actions_alignment=ft.MainAxisAlignment.END
     )
 
@@ -458,6 +474,7 @@ def main(page: ft.Page):
         if forgot_dialog not in page.overlay: page.overlay.append(forgot_dialog)
         forgot_dialog.open = True
         page.update()
+
 
     def open_mypage_dialog(dialog_component):
         if dialog_component not in page.overlay: page.overlay.append(dialog_component)
