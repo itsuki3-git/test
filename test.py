@@ -23,11 +23,13 @@ def main(page: ft.Page):
     STORAGE_USERS_KEY = "fruit_app_registered_users"
     STORAGE_RECORDS_KEY = "fruit_app_saved_records"
     STORAGE_COUNTER_KEY = "fruit_app_record_id_counter"
+    STORAGE_PRIVACY_KEY = "fruit_app_privacy_settings"  # 非表示設定用のキー
 
     # ブラウザのストレージからデータをロード
     registered_users = page.client_storage.get(STORAGE_USERS_KEY) or []
     saved_records = page.client_storage.get(STORAGE_RECORDS_KEY) or []
     record_id_counter = page.client_storage.get(STORAGE_COUNTER_KEY) or 0
+    privacy_settings = page.client_storage.get(STORAGE_PRIVACY_KEY) or {}  # {"ユーザー名": bool(表示するか)}
 
     # --- UIコンポーネントの参照定義 ---
     login_name_input = ft.TextField(
@@ -43,23 +45,26 @@ def main(page: ft.Page):
     orange_count_text = ft.Text(value="0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER)
     grape_count_text = ft.Text(value="0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER)
 
-    # 各種リスト用コンポーネント
+    # 各種リスト用・設定用コンポーネント
     edit_name_input = ft.TextField(label="名前を編集", hint_text="新しい名前を入力", expand=True)
+    ranking_switch = ft.Switch(label="ランキングに名前と記録を表示する", value=True,
+                               on_change=lambda e: handle_privacy_change(e))
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # --- エラー警告ダイアログの制御 ---
+    # --- 確認・エラーダイアログの制御 ---
     def close_dialog(e):
         alert_dialog.open = False
         page.update()
 
     alert_dialog = ft.AlertDialog(
-        title=ft.Text("エラー"),
+        title=ft.Text("メッセージ"),
         content=ft.Text(""),
         actions=[ft.TextButton("OK", on_click=close_dialog)]
     )
 
-    def show_alert(message):
+    def show_alert(message, title="エラー"):
+        alert_dialog.title.value = title
         alert_dialog.content.value = message
         if alert_dialog not in page.overlay:
             page.overlay.append(alert_dialog)
@@ -85,8 +90,13 @@ def main(page: ft.Page):
         current_player = input_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
-        login_name_input.value = ""
 
+        # プライバシー設定の初期化（デフォルトは表示ON）
+        if current_player not in privacy_settings:
+            privacy_settings[current_player] = True
+        ranking_switch.value = privacy_settings[current_player]
+
+        login_name_input.value = ""
         login_view.visible = False
         main_tab_view.visible = True
         reset_current_game(None)
@@ -111,12 +121,18 @@ def main(page: ft.Page):
             show_alert("その名前はすでに使用されています。")
             return
 
+        # ユーザー名簿の更新
         if current_player in registered_users:
             registered_users.remove(current_player)
-
         registered_users.append(new_name)
         page.client_storage.set(STORAGE_USERS_KEY, registered_users)
 
+        # プライバシー設定（非表示スイッチの設定）の引き継ぎ
+        old_privacy = privacy_settings.pop(current_player, True)
+        privacy_settings[new_name] = old_privacy
+        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
+
+        # 過去のゲーム記録の名前を一括書き換え
         for record in saved_records:
             if record["player"] == current_player:
                 record["player"] = new_name
@@ -128,6 +144,41 @@ def main(page: ft.Page):
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
+
+    # --- 非表示設定（トグルの切り替え）処理 ---
+    def handle_privacy_change(e):
+        if not current_player:
+            return
+        privacy_settings[current_player] = ranking_switch.value
+        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
+        update_ranking_ui()  # ランキング画面を即座に再計算して更新
+
+    # --- アカウント完全削除処理 ---
+    def handle_delete_account(e):
+        nonlocal current_player, saved_records
+        if not current_player:
+            return
+
+        # 1. 名簿とプライバシー設定から削除
+        if current_player in registered_users:
+            registered_users.remove(current_player)
+        page.client_storage.set(STORAGE_USERS_KEY, registered_users)
+
+        privacy_settings.pop(current_player, None)
+        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
+
+        # 2. ゲーム記録を完全削除
+        saved_records = [r for r in saved_records if r["player"] != current_player]
+        page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
+
+        deleted_name = current_player
+        current_player = None
+
+        login_view.visible = True
+        main_tab_view.visible = False
+        update_all_uis()
+
+        show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
 
     # --- ログアウト処理 ---
     def handle_logout(e):
@@ -169,7 +220,6 @@ def main(page: ft.Page):
     # --- マイページ（自分だけの記録）の描画更新 ---
     def update_my_records_ui():
         my_records_list.controls.clear()
-        # 今ログインしているプレイヤーの記録だけを抽出
         my_filtered = [r for r in saved_records if r["player"] == current_player]
 
         if not my_filtered:
@@ -207,20 +257,24 @@ def main(page: ft.Page):
                 )
         page.update()
 
-    # --- ランキング（全員のハイスコア順）の描画更新 ---
+    # --- ランキング（非表示設定のユーザーを除外してハイスコア順に表示）の描画更新 ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-        if not saved_records:
+
+        # ★ここがポイント：プライバシー設定がON（True）のプレイヤーの記録だけを抽出★
+        # 設定データがないプレイヤーはデフォルトで表示（True）とみなします
+        visible_records = [r for r in saved_records if privacy_settings.get(r["player"], True) == True]
+
+        if not visible_records:
             ranking_list.controls.append(
-                ft.Text("記録がありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER)
+                ft.Text("公開されている記録はありません", italic=True, color=ft.Colors.GREY_500,
+                        text_align=ft.TextAlign.CENTER)
             )
         else:
-            # スコア（final_score）が高い順にソート
-            sorted_records = sorted(saved_records, key=lambda x: x["final_score"], reverse=True)
+            sorted_records = sorted(visible_records, key=lambda x: x["final_score"], reverse=True)
 
             for index, record in enumerate(sorted_records):
                 rank = index + 1
-                # 上位3名にはメダルっぽい色を付ける
                 if rank == 1:
                     rank_color = ft.Colors.AMBER_500
                     rank_text = f"🥇 {rank}位"
@@ -309,6 +363,8 @@ def main(page: ft.Page):
             if not still_has_records and deleted_player in registered_users:
                 registered_users.remove(deleted_player)
                 page.client_storage.set(STORAGE_USERS_KEY, registered_users)
+                privacy_settings.pop(deleted_player, None)
+                page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
 
             page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
             update_all_uis()
@@ -355,7 +411,7 @@ def main(page: ft.Page):
                 login_name_input,
                 ft.Container(height=10),
                 ft.ElevatedButton(
-                    "登録してゲーム開始",
+                    "登録してゲーム開始", 
                     icon=ft.Icons.PLAY_ARROW,
                     on_click=handle_login,
                     bgcolor=ft.Colors.BLUE,
@@ -382,8 +438,8 @@ def main(page: ft.Page):
                     controls=[
                         logged_in_user_text,
                         ft.TextButton(
-                            "ログアウト",
-                            icon=ft.Icons.LOGOUT,
+                            "ログアウト", 
+                            icon=ft.Icons.LOGOUT, 
                             style=ft.ButtonStyle(
                                 color=ft.Colors.RED_600,
                                 icon_color=ft.Colors.RED_600
@@ -418,16 +474,16 @@ def main(page: ft.Page):
                 content=ft.Row(
                     controls=[
                         ft.OutlinedButton(
-                            "リセット",
-                            icon=ft.Icons.REFRESH,
-                            on_click=reset_current_game,
+                            "リセット", 
+                            icon=ft.Icons.REFRESH, 
+                            on_click=reset_current_game, 
                             style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)
                         ),
                         ft.ElevatedButton(
-                            "ゲーム記録を保存",
-                            icon=ft.Icons.SAVE,
-                            on_click=save_current_game,
-                            bgcolor=ft.Colors.GREEN_700,
+                            "ゲーム記録を保存", 
+                            icon=ft.Icons.SAVE, 
+                            on_click=save_current_game, 
+                            bgcolor=ft.Colors.GREEN_700, 
                             color=ft.Colors.WHITE
                         ),
                     ],
@@ -439,7 +495,7 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # --- タブ2: マイページ（名前編集 ＆ 自分の過去の記録）のレイアウト ---
+    # --- タブ2: マイページ（名前編集 ＆ 自分の過去の記録 ＆ 各種設定）のレイアウト ---
     mypage_tab_view = ft.Column(
         controls=[
             ft.Container(
@@ -449,7 +505,7 @@ def main(page: ft.Page):
                         controls=[
                             edit_name_input,
                             ft.ElevatedButton(
-                                "名前を変更",
+                                "名前を変更", 
                                 icon=ft.Icons.EDIT,
                                 on_click=handle_rename,
                                 bgcolor=ft.Colors.BLUE_600,
@@ -457,6 +513,25 @@ def main(page: ft.Page):
                             )
                         ],
                         spacing=10,
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                    ),
+                    ft.Divider(height=10, thickness=1),
+                    # プライバシー設定（ランキング表示ON/OFFスイッチ）
+                    ranking_switch,
+                    ft.Divider(height=10, thickness=1),
+                    # アカウント削除エリア
+                    ft.Row(
+                        controls=[
+                            ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400),
+                            ft.ElevatedButton(
+                                "アカウントを削除する",
+                                icon=ft.Icons.DANGEROUS,
+                                on_click=handle_delete_account,
+                                bgcolor=ft.Colors.RED_600,
+                                color=ft.Colors.WHITE,
+                                style=ft.ButtonStyle(padding=8)
+                            )
+                        ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN
                     )
                 ]),
