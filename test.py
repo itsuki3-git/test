@@ -1,9 +1,10 @@
 import flet as ft
 from datetime import datetime
+from supabase import create_client, Client
 
 
 def main(page: ft.Page):
-    page.title = "フルーツ得点計算 & プレイヤー管理"
+    page.title = "フルーツ得点計算 & プレイヤー管理 (Supabase版)"
     page.window_width = 450
     page.window_height = 700
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -15,21 +16,19 @@ def main(page: ft.Page):
         "grape": 15
     }
 
+    # =========================================================================
+    # ⚠️【超重要】あなたのSupabaseの情報をここに貼り付けてください
+    # =========================================================================
+    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
+    # =========================================================================
+
+    # Supabaseクライアントの初期化
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
     # --- 状態管理用データ（初期化） ---
     current_player = None  # 現在ログイン中のプレイヤー名
     counts = {"apple": 0, "orange": 0, "grape": 0}
-
-    # 永続保存用のキー定義
-    STORAGE_USERS_KEY = "fruit_app_registered_users"
-    STORAGE_RECORDS_KEY = "fruit_app_saved_records"
-    STORAGE_COUNTER_KEY = "fruit_app_record_id_counter"
-    STORAGE_PRIVACY_KEY = "fruit_app_privacy_settings"
-
-    # ブラウザのストレージからデータをロード
-    registered_users = page.client_storage.get(STORAGE_USERS_KEY) or []
-    saved_records = page.client_storage.get(STORAGE_RECORDS_KEY) or []
-    record_id_counter = page.client_storage.get(STORAGE_COUNTER_KEY) or 0
-    privacy_settings = page.client_storage.get(STORAGE_PRIVACY_KEY) or {}
 
     # --- UIコンポーネントの参照定義 ---
     login_name_input = ft.TextField(
@@ -71,19 +70,18 @@ def main(page: ft.Page):
         alert_dialog.open = True
         page.update()
 
-    # --- ★追加：アカウント削除前の注意・確認用ダイアログ★ ---
+    # --- アカウント削除前の注意・確認用ダイアログ ---
     def cancel_delete(e):
         confirm_delete_dialog.open = False
         page.update()
 
     def confirm_delete(e):
         confirm_delete_dialog.open = False
-        execute_delete_account()  # キャンセルされなかった場合のみ実際の削除処理を実行
+        execute_delete_account()
 
     confirm_delete_dialog = ft.AlertDialog(
         title=ft.Text("⚠️ 最終確認"),
-        content=ft.Text(
-            "本当にアカウントを削除しますか？\nこのプレイヤーの過去のゲーム記録もすべて消去され、元に戻すことはできません。"),
+        content=ft.Text("本当にアカウントを削除しますか？\n過去のゲーム記録もすべて消去され、元に戻すことはできません。"),
         actions=[
             ft.TextButton("キャンセル", on_click=cancel_delete),
             ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=confirm_delete),
@@ -97,7 +95,7 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
-    # --- ログイン / 新規登録 処理 ---
+    # --- ログイン / 新規登録 処理 (Supabase通信) ---
     def handle_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -106,20 +104,26 @@ def main(page: ft.Page):
             show_alert("プレイヤー名を入力してください。")
             return
 
-        if input_name in registered_users:
-            show_alert("その名前はすでに使用されています。")
-            return
+        try:
+            # 既存のユーザー名があるかSupabaseから検索
+            res = supabase.table("users").select("username").eq("username", input_name).execute()
+            if res.data:
+                show_alert("その名前はすでに使用されています。")
+                return
 
-        registered_users.append(input_name)
-        page.client_storage.set(STORAGE_USERS_KEY, registered_users)
+            # Supabaseに新規ユーザーを登録
+            supabase.table("users").insert({"username": input_name}).execute()
+            # 初期プライバシー設定を登録（表示ON）
+            supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
+
+        except Exception as ex:
+            show_alert(f"接続エラー、またはRLSがONになっています。\n詳細: {ex}")
+            return
 
         current_player = input_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
-
-        if current_player not in privacy_settings:
-            privacy_settings[current_player] = True
-        ranking_switch.value = privacy_settings[current_player]
+        ranking_switch.value = True
 
         login_name_input.value = ""
         login_view.visible = False
@@ -130,7 +134,7 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(f"🎉 {current_player} さんを登録しました！"), open=True))
         page.update()
 
-    # --- 名前の変更（編集）処理 ---
+    # --- 名前の変更（編集）処理 (Supabase一括更新) ---
     def handle_rename(e):
         nonlocal current_player
         new_name = edit_name_input.value.strip()
@@ -142,23 +146,19 @@ def main(page: ft.Page):
         if new_name == current_player:
             return
 
-        if new_name in registered_users:
-            show_alert("その名前はすでに使用されています。")
+        try:
+            # 他人に使われているかチェック
+            res = supabase.table("users").select("username").eq("username", new_name).execute()
+            if res.data:
+                show_alert("その名前はすでに使用されています。")
+                return
+
+            # Supabaseのマスターデータを更新 (ON UPDATE CASCADEが働くため records, privacy も連動して自動で書き換わります)
+            supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
+
+        except Exception as ex:
+            show_alert(f"名前の変更に失敗しました。\n詳細: {ex}")
             return
-
-        if current_player in registered_users:
-            registered_users.remove(current_player)
-        registered_users.append(new_name)
-        page.client_storage.set(STORAGE_USERS_KEY, registered_users)
-
-        old_privacy = privacy_settings.pop(current_player, True)
-        privacy_settings[new_name] = old_privacy
-        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
-
-        for record in saved_records:
-            if record["player"] == current_player:
-                record["player"] = new_name
-        page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
 
         current_player = new_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
@@ -167,29 +167,29 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
-    # --- 非表示設定（トグルの切り替え）処理 ---
+    # --- 非表示設定（トグルの切り替え）処理 (Supabase通信) ---
     def handle_privacy_change(e):
         if not current_player:
             return
-        privacy_settings[current_player] = ranking_switch.value
-        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
+        try:
+            supabase.table("privacy").update({"is_visible": ranking_switch.value}).eq("username",
+                                                                                      current_player).execute()
+        except Exception as ex:
+            show_alert(f"設定の保存に失敗しました。\n詳細: {ex}")
         update_ranking_ui()
 
-    # --- アカウント完全削除の実処理（確認後に呼ばれる） ---
+    # --- アカウント完全削除の実処理 (Supabaseカスケード削除) ---
     def execute_delete_account():
-        nonlocal current_player, saved_records
+        nonlocal current_player
         if not current_player:
             return
 
-        if current_player in registered_users:
-            registered_users.remove(current_player)
-        page.client_storage.set(STORAGE_USERS_KEY, registered_users)
-
-        privacy_settings.pop(current_player, None)
-        page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
-
-        saved_records = [r for r in saved_records if r["player"] != current_player]
-        page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
+        try:
+            # ON DELETE CASCADEを設定しているため、usersから消すだけで records と privacy からも自動で全データが完全抹消されます
+            supabase.table("users").delete().eq("username", current_player).execute()
+        except Exception as ex:
+            show_alert(f"アカウントの削除に失敗しました。\n詳細: {ex}")
+            return
 
         deleted_name = current_player
         current_player = None
@@ -237,10 +237,21 @@ def main(page: ft.Page):
         update_my_records_ui()
         update_ranking_ui()
 
-    # --- マイページ（自分だけの記録）の描画更新 ---
+    # --- マイページ（自分だけの記録）の描画更新 (Supabaseから取得) ---
     def update_my_records_ui():
         my_records_list.controls.clear()
-        my_filtered = [r for r in saved_records if r["player"] == current_player]
+
+        if not current_player:
+            return
+
+        try:
+            # ログイン中のプレイヤーの記録だけをSupabaseから取得
+            res = supabase.table("records").select("*").eq("player", current_player).execute()
+            my_filtered = res.data or []
+        except Exception as ex:
+            my_records_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
 
         if not my_filtered:
             my_records_list.controls.append(
@@ -248,7 +259,8 @@ def main(page: ft.Page):
                         text_align=ft.TextAlign.CENTER)
             )
         else:
-            for record in reversed(my_filtered):
+            # ID順の逆（新しい順）に並び替え
+            for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
                 my_records_list.controls.append(
                     ft.Container(
                         content=ft.Row(
@@ -277,10 +289,25 @@ def main(page: ft.Page):
                 )
         page.update()
 
-    # --- ランキングの描画更新 ---
+    # --- ランキング（非表示設定のユーザーを隠してハイスコア順に取得） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-        visible_records = [r for r in saved_records if privacy_settings.get(r["player"], True) == True]
+
+        try:
+            # 1. まず非表示（is_visible=false）に設定しているユーザーの名前を一覧取得
+            privacy_res = supabase.table("privacy").select("username").eq("is_visible", False).execute()
+            hidden_users = [p["username"] for p in privacy_res.data] if privacy_res.data else []
+
+            # 2. 全員のゲーム記録をSupabaseからまるごとロード
+            records_res = supabase.table("records").select("*").execute()
+            all_records = records_res.data or []
+        except Exception as ex:
+            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+
+        # 3. 非表示設定のユーザーの記録をフィルタリング（除外）
+        visible_records = [r for r in all_records if r["player"] not in hidden_users]
 
         if not visible_records:
             ranking_list.controls.append(
@@ -288,6 +315,7 @@ def main(page: ft.Page):
                         text_align=ft.TextAlign.CENTER)
             )
         else:
+            # 得点（final_score）が高い順に自動ソート
             sorted_records = sorted(visible_records, key=lambda x: x["final_score"], reverse=True)
 
             for index, record in enumerate(sorted_records):
@@ -329,7 +357,7 @@ def main(page: ft.Page):
                 )
         page.update()
 
-    # --- 現在のゲームをリreset ---
+    # --- 現在のゲームをリセット ---
     def reset_current_game(e):
         for fruit in counts:
             counts[fruit] = 0
@@ -338,10 +366,8 @@ def main(page: ft.Page):
         grape_count_text.value = "0"
         calculate_total_score()
 
-    # --- 現在のスコアを過去の記録へ保存 ---
+    # --- 現在のスコアを過去の記録へ保存 (Supabaseへの追加) ---
     def save_current_game(e):
-        nonlocal record_id_counter
-
         if not current_player:
             show_alert("ログインしていません。")
             return
@@ -349,19 +375,19 @@ def main(page: ft.Page):
         total_score = calculate_total_score()
         date_str = datetime.now().strftime("%Y/%m/%d %H:%M")
 
-        saved_records.append({
-            "id": record_id_counter,
-            "player": current_player,
-            "date": date_str,
-            "final_score": total_score,
-            "apple": counts["apple"],
-            "orange": counts["orange"],
-            "grape": counts["grape"]
-        })
-        record_id_counter += 1
-
-        page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
-        page.client_storage.set(STORAGE_COUNTER_KEY, record_id_counter)
+        try:
+            # データを辞書型にしてSupabaseのテーブルへ1行挿入
+            supabase.table("records").insert({
+                "player": current_player,
+                "final_score": total_score,
+                "apple": counts["apple"],
+                "orange": counts["orange"],
+                "grape": counts["grape"],
+                "date": date_str
+            }).execute()
+        except Exception as ex:
+            show_alert(f"記録の保存に失敗しました。\n詳細: {ex}")
+            return
 
         reset_current_game(None)
         update_all_uis()
@@ -369,22 +395,16 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
         page.update()
 
-    # --- 過去の記録の削除 ---
+    # --- 過去の記録の削除 (Supabaseからの削除) ---
     def delete_saved_record(target_id):
-        target_idx = next((i for i, r in enumerate(saved_records) if r["id"] == target_id), None)
-        if target_idx is not None:
-            deleted_player = saved_records[target_idx]["player"]
-            saved_records.pop(target_idx)
+        try:
+            # 指定されたゲームレコードのIDでSupabaseから行を狙い撃ち削除
+            supabase.table("records").delete().eq("id", target_id).execute()
+        except Exception as ex:
+            show_alert(f"記録の削除に失敗しました。\n詳細: {ex}")
+            return
 
-            still_has_records = any(r["player"] == deleted_player for r in saved_records)
-            if not still_has_records and deleted_player in registered_users:
-                registered_users.remove(deleted_player)
-                page.client_storage.set(STORAGE_USERS_KEY, registered_users)
-                privacy_settings.pop(deleted_player, None)
-                page.client_storage.set(STORAGE_PRIVACY_KEY, privacy_settings)
-
-            page.client_storage.set(STORAGE_RECORDS_KEY, saved_records)
-            update_all_uis()
+        update_all_uis()
 
     # --- フルーツごとの操作行を作成する共通関数 ---
     def create_fruit_selector(label, fruit_key, count_text_component, color):
@@ -428,7 +448,7 @@ def main(page: ft.Page):
                 login_name_input,
                 ft.Container(height=10),
                 ft.ElevatedButton(
-                    "登録してゲーム開始",
+                    "登録してゲーム開始", 
                     icon=ft.Icons.PLAY_ARROW,
                     on_click=handle_login,
                     bgcolor=ft.Colors.BLUE,
@@ -455,8 +475,8 @@ def main(page: ft.Page):
                     controls=[
                         logged_in_user_text,
                         ft.TextButton(
-                            "ログアウト",
-                            icon=ft.Icons.LOGOUT,
+                            "ログアウト", 
+                            icon=ft.Icons.LOGOUT, 
                             style=ft.ButtonStyle(
                                 color=ft.Colors.RED_600,
                                 icon_color=ft.Colors.RED_600
@@ -491,16 +511,16 @@ def main(page: ft.Page):
                 content=ft.Row(
                     controls=[
                         ft.OutlinedButton(
-                            "リセット",
-                            icon=ft.Icons.REFRESH,
-                            on_click=reset_current_game,
+                            "リセット", 
+                            icon=ft.Icons.REFRESH, 
+                            on_click=reset_current_game, 
                             style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)
                         ),
                         ft.ElevatedButton(
-                            "ゲーム記録を保存",
-                            icon=ft.Icons.SAVE,
-                            on_click=save_current_game,
-                            bgcolor=ft.Colors.GREEN_700,
+                            "ゲーム記録を保存", 
+                            icon=ft.Icons.SAVE, 
+                            on_click=save_current_game, 
+                            bgcolor=ft.Colors.GREEN_700, 
                             color=ft.Colors.WHITE
                         ),
                     ],
@@ -522,7 +542,7 @@ def main(page: ft.Page):
                         controls=[
                             edit_name_input,
                             ft.ElevatedButton(
-                                "名前を変更",
+                                "名前を変更", 
                                 icon=ft.Icons.EDIT,
                                 on_click=handle_rename,
                                 bgcolor=ft.Colors.BLUE_600,
@@ -536,7 +556,7 @@ def main(page: ft.Page):
                     # プライバシー設定（ランキング表示ON/OFFスイッチ）
                     ranking_switch,
                     ft.Divider(height=10, thickness=1),
-                    # アカウント削除エリア（★確認ダイアログ用の関数を呼び出すように修正★）
+                    # アカウント削除エリア
                     ft.Row(
                         controls=[
                             ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400),
@@ -591,13 +611,12 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # 初期描画のセットアップ
+    # 初期描画のセットアップ (※ログイン前は空表示、ログイン後にSupabaseからロードされます)
     calculate_total_score()
     update_all_uis()
 
     page.add(login_view, main_tab_view)
-    
-    
+
 if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8000))
