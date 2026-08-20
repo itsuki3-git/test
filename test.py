@@ -82,7 +82,7 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
-    # 既存ユーザーのログイン（パスワード検証機能付き）
+        # 既存ユーザーのログイン（パスワード検証機能付き）
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -93,19 +93,17 @@ def main(page: ft.Page):
             return
 
         try:
-            # 名前とパスワードが一致するユーザーをSupabaseから検索
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", input_pass).execute()
             if not res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
 
-            # ログイン情報をこの端末（ブラウザ）に記憶する
+            # ★ログイン成功時にブラウザのストレージへ情報を確実に記憶
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
-            # プライバシー設定のロード
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
 
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
@@ -113,7 +111,7 @@ def main(page: ft.Page):
 
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
-    # 新規プレイヤーの登録（パスワード設定付き）
+    # 新規プレイヤーの登録
     def handle_new_register(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -127,17 +125,15 @@ def main(page: ft.Page):
             return
 
         try:
-            # 名前の重複チェック
             res = supabase.table("users").select("username").eq("username", input_name).execute()
             if res.data:
                 show_alert("その名前はすでに使用されています。")
                 return
 
-            # Supabaseにパスワード付きで新規登録
             supabase.table("users").insert({"username": input_name, "password": input_pass}).execute()
             supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
             
-            # 新規登録時もログイン情報をブラウザに記憶
+            # ★新規登録時にもログイン情報をブラウザに記憶
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
@@ -155,8 +151,6 @@ def main(page: ft.Page):
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
         
-        login_name_input.value = ""
-        login_pass_input.value = ""
         login_view.visible = False
         main_tab_view.visible = True
         reset_current_game(None)
@@ -165,23 +159,20 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
 
-    # 自動ログイン処理（起動時にブラウザの記憶をチェックする）
+    # 自動ログイン処理
     def check_auto_login():
         saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
         saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
 
         if saved_user and saved_pass:
             try:
-                # 記憶されているパスワードが今も正しいかSupabase側を最終確認
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", saved_pass).execute()
                 if res.data:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
-                # 万が一通信エラーやデータベース側で消されていた場合は記憶を消去して通常ログイン画面へ
-                page.client_storage.remove(STORAGE_REMEMBER_USER)
-                page.client_storage.remove(STORAGE_REMEMBER_PASS)
+                pass
 
     # 名前の変更処理
     def handle_rename(e):
@@ -195,7 +186,6 @@ def main(page: ft.Page):
                 show_alert("その名前はすでに使用されています。")
                 return
             supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
-            # 端末に記憶している名前も新しいものに更新
             page.client_storage.set(STORAGE_REMEMBER_USER, new_name)
         except Exception as ex:
             show_alert(f"名前変更失敗: {ex}")
@@ -226,26 +216,29 @@ def main(page: ft.Page):
             return
         deleted_name = current_player
         current_player = None
-        login_view.visible = True
-        main_tab_view.visible = False
         
-        # アカウント削除時は端末の自動ログイン記憶も完全に抹消する
+        # 記憶を完全に消去して初期フォームに戻す
         page.client_storage.remove(STORAGE_REMEMBER_USER)
         page.client_storage.remove(STORAGE_REMEMBER_PASS)
+        login_name_input.value = ""
+        login_pass_input.value = ""
         
+        login_view.visible = True
+        main_tab_view.visible = False
         update_all_uis()
         show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
 
-    # ログアウト処理
+    # ★修正：ログアウトボタンを押しても、手元の記憶は消さずに残す
     def handle_logout(e):
         nonlocal current_player
         current_player = None
+        
+        # 記憶していた名前とパスワードを最初から入力ボックスに代入しておく
+        login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
+        login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
+        
         login_view.visible = True
         main_tab_view.visible = False
-        
-        # ★ポイント：ログアウトボタンを押したときは、次回自動ログインさせずに手動入力を求めるため、記憶を抹消します
-        page.client_storage.remove(STORAGE_REMEMBER_USER)
-        page.client_storage.remove(STORAGE_REMEMBER_PASS)
         page.update()
 
     # 合計得点の計算・更新
@@ -269,6 +262,7 @@ def main(page: ft.Page):
     def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
+
 
     # マイページ（自分だけの記録）の描画更新
     def update_my_records_ui():
