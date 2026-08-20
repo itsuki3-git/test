@@ -3,7 +3,7 @@ from datetime import datetime
 from supabase import create_client, Client
 
 def main(page: ft.Page):
-    page.title = "フルーツ得点計算 & プレイヤー管理 (マイページ設定版)"
+    page.title = "フルーツ得点計算 & プレイヤー管理 (セキュリティ強化版)"
     page.window_width = 450
     page.window_height = 700
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -25,9 +25,12 @@ def main(page: ft.Page):
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
     STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
-    # --- UIコンポーネント：ログイン画面用 ---
+    # --- 🔐 エラー回避のため、ボタンや入力欄を最優先で定義します ---
     login_name_input = ft.TextField(label="プレイヤー名", hint_text="例: たろう")
     login_pass_input = ft.TextField(label="パスワード", password=True, can_reveal_password=True)
+    
+    register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PERSON_ADD, on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=150, height=45)
+    login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=150, height=45)
     
     # パスワード救済（忘れた場合）ダイアログ用
     forgot_name_input = ft.TextField(label="プレイヤー名を入力")
@@ -47,7 +50,7 @@ def main(page: ft.Page):
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # 🛠️ マイページ用：各種セキュリティ入力欄
+    # マイページ用：各種セキュリティ入力欄
     mypage_old_pass = ft.TextField(label="現在のパスワード", password=True)
     mypage_new_pass = ft.TextField(label="新しいパスワード (4桁以上)", password=True)
     
@@ -83,6 +86,7 @@ def main(page: ft.Page):
         if confirm_delete_dialog not in page.overlay: page.overlay.append(confirm_delete_dialog)
         confirm_delete_dialog.open = True
         page.update()
+
 
     # 既存ユーザーのログイン
     def handle_existing_login(e):
