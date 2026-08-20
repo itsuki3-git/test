@@ -92,7 +92,7 @@ def main(page: ft.Page):
         import hashlib
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-    # 既存ユーザーのログイン
+    # 既存ユーザーのログイン (★リストからのデータ取得を正しい方法に修正)
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -101,9 +101,10 @@ def main(page: ft.Page):
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
         try:
-            # Python側で安全にハッシュ化してからSupabaseを検索
             hashed_pass = hash_password(input_pass)
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
+            
+            # リスト（res.data）が空っぽ ➔ 該当するユーザー名とパスワードの組み合わせがない
             if not res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
@@ -112,7 +113,8 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+            # データの1番目 [0] から安全に設定を読み込む形に修正
+            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -130,13 +132,11 @@ def main(page: ft.Page):
             show_alert("パスワードは4桁以上で入力してください。")
             return
         try:
-            # 名前の重複チェック
             res = supabase.table("users").select("username").eq("username", input_name).execute()
             if res.data:
                 show_alert("その名前はすでに使用されています。")
                 return
 
-            # パスワードを暗号化してから安全に保存（日本語ユーザー名でも100%エラーになりません）
             hashed_pass = hash_password(input_pass)
             supabase.table("users").insert({"username": input_name, "password": hashed_pass}).execute()
             supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
@@ -149,7 +149,7 @@ def main(page: ft.Page):
             return
         enter_game_session(input_name, f"🎉 新しいプレイヤー {input_name} さんを登録しました！")
 
-    # セッション開始共通処理
+    # セッション開始共通処理 (★ここもリストの1番目 [0] から読み込むように修正)
     def enter_game_session(username, success_message):
         nonlocal current_player
         current_player = username
@@ -157,6 +157,7 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question, secret_answer").eq("username", current_player).execute()
+            # データの1番目 [0] から秘密の質問の初期値を安全にセット
             if res.data:
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = res.data[0].get("secret_answer") or ""
@@ -169,7 +170,7 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
 
-    # 自動ログイン処理
+    # 自動ログイン処理 (★ここもリストの1番目 [0] から読み込むように修正)
     def check_auto_login():
         saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
         saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
@@ -179,11 +180,12 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
 
+    
     # マイページでのパスワード変更処理
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
