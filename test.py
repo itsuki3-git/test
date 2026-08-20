@@ -95,7 +95,7 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
-    # --- ログイン / 新規登録 処理 (Supabase通信) ---
+    # --- ログイン / 新規登録 処理 (自動判別モードにアップグレード) ---
     def handle_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -107,23 +107,29 @@ def main(page: ft.Page):
         try:
             # 既存のユーザー名があるかSupabaseから検索
             res = supabase.table("users").select("username").eq("username", input_name).execute()
-            if res.data:
-                show_alert("その名前はすでに使用されています。")
-                return
 
-            # Supabaseに新規ユーザーを登録
-            supabase.table("users").insert({"username": input_name}).execute()
-            # 初期プライバシー設定を登録（表示ON）
-            supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
+            if res.data:
+                # ユーザーがすでに見つかった場合 ➔ 「既存ログイン」
+                message = f"👤 {input_name} さんとしてログインしました！"
+
+                # そのユーザーの現在のプライバシー設定を取得して反映
+                priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
+                is_visible_setting = priv_res.data[0]["is_visible"] if priv_res.data else True
+                ranking_switch.value = is_visible_setting
+            else:
+                # ユーザーが見つからなかった場合 ➔ 「新規登録」
+                supabase.table("users").insert({"username": input_name}).execute()
+                supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
+                message = f"🎉 新しいプレイヤー {input_name} さんを登録しました！"
+                ranking_switch.value = True
 
         except Exception as ex:
-            show_alert(f"接続エラー、またはRLSがONになっています。\n詳細: {ex}")
+            show_alert(f"接続エラーが発生しました。\n詳細: {ex}")
             return
 
         current_player = input_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
-        ranking_switch.value = True
 
         login_name_input.value = ""
         login_view.visible = False
@@ -131,10 +137,10 @@ def main(page: ft.Page):
         reset_current_game(None)
         update_all_uis()
 
-        page.overlay.append(ft.SnackBar(ft.Text(f"🎉 {current_player} さんを登録しました！"), open=True))
+        page.overlay.append(ft.SnackBar(ft.Text(message), open=True))
         page.update()
 
-    # --- 名前の変更（編集）処理 (Supabase一括更新) ---
+    # --- 名前の変更（編集）処理 ---
     def handle_rename(e):
         nonlocal current_player
         new_name = edit_name_input.value.strip()
@@ -147,13 +153,11 @@ def main(page: ft.Page):
             return
 
         try:
-            # 他人に使われているかチェック
             res = supabase.table("users").select("username").eq("username", new_name).execute()
             if res.data:
                 show_alert("その名前はすでに使用されています。")
                 return
 
-            # Supabaseのマスターデータを更新 (ON UPDATE CASCADEが働くため records, privacy も連動して自動で書き換わります)
             supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
 
         except Exception as ex:
@@ -167,25 +171,25 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
-    # --- 非表示設定（トグルの切り替え）処理 (Supabase通信) ---
+    # --- 非表示設定（トグルの切り替え）処理 ---
     def handle_privacy_change(e):
         if not current_player:
             return
+        current_switch_value = e.control.value
         try:
-            supabase.table("privacy").update({"is_visible": ranking_switch.value}).eq("username",
+            supabase.table("privacy").update({"is_visible": current_switch_value}).eq("username",
                                                                                       current_player).execute()
         except Exception as ex:
             show_alert(f"設定の保存に失敗しました。\n詳細: {ex}")
         update_ranking_ui()
 
-    # --- アカウント完全削除の実処理 (Supabaseカスケード削除) ---
+    # --- アカウント完全削除の実処理 ---
     def execute_delete_account():
         nonlocal current_player
         if not current_player:
             return
 
         try:
-            # ON DELETE CASCADEを設定しているため、usersから消すだけで records と privacy からも自動で全データが完全抹消されます
             supabase.table("users").delete().eq("username", current_player).execute()
         except Exception as ex:
             show_alert(f"アカウントの削除に失敗しました。\n詳細: {ex}")
@@ -448,7 +452,7 @@ def main(page: ft.Page):
                 login_name_input,
                 ft.Container(height=10),
                 ft.ElevatedButton(
-                    "登録してゲーム開始", 
+                    "登録してゲーム開始",
                     icon=ft.Icons.PLAY_ARROW,
                     on_click=handle_login,
                     bgcolor=ft.Colors.BLUE,
@@ -475,8 +479,8 @@ def main(page: ft.Page):
                     controls=[
                         logged_in_user_text,
                         ft.TextButton(
-                            "ログアウト", 
-                            icon=ft.Icons.LOGOUT, 
+                            "ログアウト",
+                            icon=ft.Icons.LOGOUT,
                             style=ft.ButtonStyle(
                                 color=ft.Colors.RED_600,
                                 icon_color=ft.Colors.RED_600
@@ -511,16 +515,16 @@ def main(page: ft.Page):
                 content=ft.Row(
                     controls=[
                         ft.OutlinedButton(
-                            "リセット", 
-                            icon=ft.Icons.REFRESH, 
-                            on_click=reset_current_game, 
+                            "リセット",
+                            icon=ft.Icons.REFRESH,
+                            on_click=reset_current_game,
                             style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)
                         ),
                         ft.ElevatedButton(
-                            "ゲーム記録を保存", 
-                            icon=ft.Icons.SAVE, 
-                            on_click=save_current_game, 
-                            bgcolor=ft.Colors.GREEN_700, 
+                            "ゲーム記録を保存",
+                            icon=ft.Icons.SAVE,
+                            on_click=save_current_game,
+                            bgcolor=ft.Colors.GREEN_700,
                             color=ft.Colors.WHITE
                         ),
                     ],
@@ -542,7 +546,7 @@ def main(page: ft.Page):
                         controls=[
                             edit_name_input,
                             ft.ElevatedButton(
-                                "名前を変更", 
+                                "名前を変更",
                                 icon=ft.Icons.EDIT,
                                 on_click=handle_rename,
                                 bgcolor=ft.Colors.BLUE_600,
@@ -611,7 +615,7 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # 初期描画のセットアップ (※ログイン前は空表示、ログイン後にSupabaseからロードされます)
+    # 初期描画のセットアップ
     calculate_total_score()
     update_all_uis()
 
