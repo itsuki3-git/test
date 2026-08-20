@@ -329,87 +329,62 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
+        # フルーツごとの操作行を作成する共通関数
     def create_fruit_selector(label, fruit_key, count_text_component, color):
-        return ft.Container(content=ft.Row(controls=[
-            ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True), ft.Row(
-                controls=[ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color,
-                                        on_click=lambda e: adjust_count(fruit_key, -1)), count_text_component,
-                          ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color,
-                                        on_click=lambda e: adjust_count(fruit_key, 1))], spacing=5)],
-                                           alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10,
-                            border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE)
+        return ft.Container(content=ft.Row(controls=[ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True), ft.Row(controls=[ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)), count_text_component, ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE)
 
-    # レイアウト配置
-    login_view = ft.Container(content=ft.Column(
-        controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), login_title_text, login_sub_text,
-                  ft.Container(height=10), login_name_input, ft.Container(height=10), register_btn, login_btn,
-                  switch_mode_link], alignment=ft.MainAxisAlignment.CENTER,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=30, alignment=ft.alignment.center,
-                              expand=True, visible=True)
-    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text,
-                                                                              ft.TextButton("ログアウト",
-                                                                                            icon=ft.Icons.LOGOUT,
-                                                                                            style=ft.ButtonStyle(
-                                                                                                color=ft.Colors.RED_600,
-                                                                                                icon_color=ft.Colors.RED_600),
-                                                                                            on_click=handle_logout)],
-                                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                                     padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8),
-                                        ft.Container(content=ft.Column(
-                                            [ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600),
-                                             score_display], alignment=ft.MainAxisAlignment.CENTER,
-                                            horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                                                     alignment=ft.alignment.center, padding=10), ft.Container(
-            content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600),
-                               create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600),
-                               create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)],
-                              spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[
-            ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game,
-                              style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
-            ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game,
-                              bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
-                                                                                                 alignment=ft.MainAxisAlignment.SPACE_EVENLY),
-                                                                                  padding=15)], expand=True)
-    mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Column(
-        [ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400), ft.Row(
-            controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename,
-                                                         bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
-            spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN), ft.Divider(height=10, thickness=1),
-         ranking_switch, ft.Divider(height=10, thickness=1), ft.Row(
-            controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400),
-                      ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS,
-                                        on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600,
-                                        color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN)]), padding=15, bgcolor=ft.Colors.GREY_50,
-                                                       border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10),
-                                          ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16,
-                                                                       weight=ft.FontWeight.BOLD,
-                                                                       color=ft.Colors.BLUE_GREY_700),
-                                                       padding=ft.padding.only(left=15, top=15, right=15)),
-                                          ft.Container(content=my_records_list, expand=True)], expand=True)
-    ranking_tab_view = ft.Column(controls=[ft.Container(
-        content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)],
-                                 expand=True)
+    # 🛠️ 【レスポンシブ対応】PCなら横並び、スマホなら縦並びにするボタン配置
+    # xs=12 (スマホ等：横幅を12列丸ごと使う＝縦並びになる)
+    # md=6  (PC等：横幅の半分[6列]ずつ分かち合う＝横並びになる)
+    action_buttons_row = ft.ResponsiveRow(
+        controls=[
+            ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
+            ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
+        ],
+        alignment=ft.MainAxisAlignment.CENTER
+    )
 
-    main_tab_view = ft.Tabs(selected_index=0, animation_duration=300,
-                            tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
-                                  ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
-                                  ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)],
-                            expand=True, visible=False)
+    # ログイン・登録画面全体のレイアウト
+    login_view = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600),
+                login_title_text,
+                login_sub_text,
+                ft.Container(height=10),
+                ft.Container(content=login_name_input, width=300), # 入力欄が広がりすぎないよう幅を固定
+                ft.Container(height=10),
+                ft.Container(content=action_buttons_row, width=340), # ボタン配置エリア
+                ft.Container(height=5),
+                switch_mode_link
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10
+        ),
+        padding=20,
+        alignment=ft.alignment.center,
+        expand=True,
+        visible=True
+    )
+
+    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
+    mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Column([ft.Text("プロフィール設定", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_400), ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN), ft.Divider(height=10, thickness=1), ranking_switch, ft.Divider(height=10, thickness=1), ft.Row(controls=[ft.Text("アカウントの完全削除:", size=13, color=ft.Colors.RED_400), ft.ElevatedButton("アカウントを削除する", icon=ft.Icons.DANGEROUS, on_click=trigger_delete_confirmation, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE, style=ft.ButtonStyle(padding=8))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)]), padding=15, bgcolor=ft.Colors.GREY_50, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=10), ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)), ft.Container(content=my_records_list, expand=True)], expand=True)
+    ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)], expand=True)
+    
+    main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True, visible=False)
 
     calculate_total_score()
-
-    # 起動時に初訪問か判定して画面を初期化 (エラー回避版)
+    
+    # 起動時に初訪問か判定して画面を初期化 (エラー回避・最新版)
     if page.client_storage.get(STORAGE_FIRST_VISIT_KEY):
         toggle_login_mode(True)
     else:
         toggle_login_mode(False)
-
-
+        
     update_all_uis()
     page.add(login_view, main_tab_view)
-
+    
 if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8000))
