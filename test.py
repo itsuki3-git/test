@@ -12,9 +12,9 @@ def main(page: ft.Page):
 
     # =========================================================================
     # ⚠️【超重要】あなたのSupabaseの情報をここに貼り付けてください
-    # =========================================================================
-    SUPABASE_URL = "https://supabase.co"
-    SUPABASE_KEY = "あなたのKey(anonまたはservice_role)"
+    # ==========================================
+    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -25,14 +25,14 @@ def main(page: ft.Page):
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
     STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
-    # --- 🔐 エラー回避のため、ボタンや入力欄を最優先で定義します ---
+    # --- 入力欄・ボタンの優先定義（順番エラー回避） ---
     login_name_input = ft.TextField(label="プレイヤー名", hint_text="例: たろう")
     login_pass_input = ft.TextField(label="パスワード", password=True, can_reveal_password=True)
     
     register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PERSON_ADD, on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=150, height=45)
     login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=150, height=45)
     
-    # パスワード救済（忘れた場合）ダイアログ用
+    # パスワード忘れた場合（救済ダイアログ用）
     forgot_name_input = ft.TextField(label="プレイヤー名を入力")
     forgot_question_text = ft.Text(value="プレイヤー名を入力して「質問を確認」を押してください", color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
     forgot_answer_input = ft.TextField(label="質問の答えを入力")
@@ -50,14 +50,14 @@ def main(page: ft.Page):
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # マイページ用：各種セキュリティ入力欄
+    # マイページセキュリティ設定用
     mypage_old_pass = ft.TextField(label="現在のパスワード", password=True)
     mypage_new_pass = ft.TextField(label="新しいパスワード (4桁以上)", password=True)
     
     mypage_question_input = ft.TextField(label="新しく登録する「秘密の質問」", hint_text="例: 初めて飼ったペットの名前は？")
     mypage_answer_input = ft.TextField(label="質問の答え", hint_text="答えを入力してください")
 
-    # --- ダイアログ制御 ---
+    # 通知ダイアログ制御
     def close_dialog(e):
         alert_dialog.open = False
         page.update()
@@ -87,6 +87,10 @@ def main(page: ft.Page):
         confirm_delete_dialog.open = True
         page.update()
 
+    # 💡 日本語エラーを絶対に起こさないPython内蔵のハッシュ暗号化
+    def hash_password(password: str) -> str:
+        import hashlib
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
     # 既存ユーザーのログイン
     def handle_existing_login(e):
@@ -97,19 +101,18 @@ def main(page: ft.Page):
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
         try:
-            res = supabase.table("users").select("username, password").eq("username", input_name).execute()
+            # Python側で安全にハッシュ化してからSupabaseを検索
+            hashed_pass = hash_password(input_pass)
+            res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
             if not res.data:
                 show_alert("名前またはパスワードが間違っています。")
                 return
-            stored_hashed_pass = res.data[0]["password"]
-            check_res = supabase.rpc("verify_password", {"hashed_pass": stored_hashed_pass, "input_pass": input_pass}).execute()
-            if not check_res.data:
-                show_alert("名前またはパスワードが間違っています。")
-                return
+
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
+            
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -127,12 +130,17 @@ def main(page: ft.Page):
             show_alert("パスワードは4桁以上で入力してください。")
             return
         try:
+            # 名前の重複チェック
             res = supabase.table("users").select("username").eq("username", input_name).execute()
             if res.data:
                 show_alert("その名前はすでに使用されています。")
                 return
-            supabase.table("users").insert({"username": input_name, "password": input_pass}).execute()
+
+            # パスワードを暗号化してから安全に保存（日本語ユーザー名でも100%エラーになりません）
+            hashed_pass = hash_password(input_pass)
+            supabase.table("users").insert({"username": input_name, "password": hashed_pass}).execute()
             supabase.table("privacy").insert({"username": input_name, "is_visible": True}).execute()
+            
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
@@ -141,13 +149,12 @@ def main(page: ft.Page):
             return
         enter_game_session(input_name, f"🎉 新しいプレイヤー {input_name} さんを登録しました！")
 
-    # セッション開始
+    # セッション開始共通処理
     def enter_game_session(username, success_message):
         nonlocal current_player
         current_player = username
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
-        
         try:
             res = supabase.table("users").select("secret_question, secret_answer").eq("username", current_player).execute()
             if res.data:
@@ -155,7 +162,6 @@ def main(page: ft.Page):
                 mypage_answer_input.value = res.data[0].get("secret_answer") or ""
         except Exception:
             pass
-
         login_view.visible = False
         main_tab_view.visible = True
         reset_current_game(None)
@@ -163,24 +169,22 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
 
-    # 自動ログイン
+    # 自動ログイン処理
     def check_auto_login():
         saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
         saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
         if saved_user and saved_pass:
             try:
-                res = supabase.table("users").select("username, password").eq("username", saved_user).execute()
+                hashed_pass = hash_password(saved_pass)
+                res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data:
-                    stored_hashed_pass = res.data[0]["password"]
-                    check_res = supabase.rpc("verify_password", {"hashed_pass": stored_hashed_pass, "input_pass": saved_pass}).execute()
-                    if check_res.data:
-                        priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                        ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
-                        enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
+                    priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+                    enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
 
-        # 🛠️ マイページでのパスワード変更処理（日本語バグを根本から修正）
+    # マイページでのパスワード変更処理
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
@@ -191,14 +195,14 @@ def main(page: ft.Page):
             show_alert("新しいパスワードは4桁以上で入力してください。")
             return
         try:
-            res = supabase.table("users").select("password").eq("username", current_player).execute()
-            if not res.data: return
-            if not supabase.rpc("verify_password", {"hashed_pass": res.data[0]["password"], "input_pass": old_pass}).execute().data:
+            hashed_old = hash_password(old_pass)
+            res = supabase.table("users").select("username").eq("username", current_player).eq("password", hashed_old).execute()
+            if not res.data:
                 show_alert("現在のパスワードが間違っています。")
                 return
             
-            # 💡 new_name_or_pass_fix を使わず、新パスワードをそのまま安全に送信します
-            supabase.table("users").update({"password": new_pass}).eq("username", current_player).execute()
+            hashed_new = hash_password(new_pass)
+            supabase.table("users").update({"password": hashed_new}).eq("username", current_player).execute()
             page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
             mypage_old_pass.value = ""
             mypage_new_pass.value = ""
@@ -230,14 +234,14 @@ def main(page: ft.Page):
             if not res.data:
                 forgot_question_text.value = "❌ そのプレイヤー名は登録されていません。"
             elif not res.data[0].get("secret_question"):
-                forgot_question_text.value = "⚠️ 秘密の質問が設定されていません。管理者に連絡してください。"
+                forgot_question_text.value = "⚠️ 秘密の質問が設定されていません。"
             else:
                 forgot_question_text.value = f"❓ 質問: {res.data[0]['secret_question']}"
         except Exception as ex:
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # 🛠️ パスワードを忘れた場合：答え合わせをしてリセットする処理（日本語バグを根本から修正）
+    # パスワードを忘れた場合：答え合わせをしてリセットする処理
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -254,8 +258,8 @@ def main(page: ft.Page):
                 show_alert("質問の答えが間違っています。")
                 return
             
-            # 💡 こちらも新パスワードをそのまま直接送信します
-            supabase.table("users").update({"password": new_p}).eq("username", name).execute()
+            hashed_new = hash_password(new_p)
+            supabase.table("users").update({"password": hashed_new}).eq("username", name).execute()
             forgot_dialog.open = False
             show_alert("パスワードを再設定しました！新しいパスワードでログインしてください。", title="再設定完了")
         except Exception as ex:
@@ -401,7 +405,7 @@ def main(page: ft.Page):
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(content=ft.Row(controls=[ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True), ft.Row(controls=[ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)), count_text_component, ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE)
 
-    # 🛠️ 【新規追加】パスワードを忘れた場合のポップアップ画面（AlertDialog）
+    # パスワードを忘れた場合のポップアップ画面（AlertDialog）
     def close_forgot_dialog(e):
         forgot_dialog.open = False
         page.update()
@@ -473,7 +477,7 @@ def main(page: ft.Page):
     # タブ1: 得点計算
     calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
     
-    # タブ2: マイページ (「パスワード変更」と「秘密の質問設定」の入力欄を追加)
+    # タブ2: マイページ (各種変更セクションを配置)
     mypage_tab_view = ft.Column(
         controls=[
             ft.Container(
@@ -482,14 +486,14 @@ def main(page: ft.Page):
                     ft.Row(controls=[edit_name_input, ft.ElevatedButton("名前を変更", icon=ft.Icons.EDIT, on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ft.Divider(height=15, thickness=1),
                     
-                    # パスワード変更セクション
+                    # パスワード変更
                     ft.Text("パスワードの変更", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700),
                     mypage_old_pass,
                     mypage_new_pass,
                     ft.Row([ft.ElevatedButton("パスワードを変更", icon=ft.Icons.LOCK_RESET, on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.END),
                     ft.Divider(height=15, thickness=1),
                     
-                    # 秘密の質問設定セクション
+                    # 秘密の質問設定
                     ft.Text("秘密の質問の設定 (忘れたとき用)", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700),
                     mypage_question_input,
                     mypage_answer_input,
@@ -505,7 +509,7 @@ def main(page: ft.Page):
                 border=ft.border.all(1, ft.Colors.GREY_200),
                 border_radius=10
             ),
-            ft.Container(content=ft.Text("あなたの過去의ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
+            ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
             ft.Container(content=my_records_list, expand=True)
         ],
         expand=True
@@ -527,6 +531,7 @@ def main(page: ft.Page):
     check_auto_login()
 
     page.add(login_view, main_tab_view)
+
 
 if __name__ == "__main__":
     import os
