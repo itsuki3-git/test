@@ -329,13 +329,16 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-        # フルーツごとの操作行を作成する共通関数
+    # フルーツごとの操作行を作成する共通関数
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(content=ft.Row(controls=[ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True), ft.Row(controls=[ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)), count_text_component, ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))], spacing=5)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE)
 
-    # 🛠️ 【レスポンシブ対応】PCなら横並び、スマホなら縦並びにするボタン配置
-    # xs=12 (スマホ等：横幅を12列丸ごと使う＝縦並びになる)
-    # md=6  (PC等：横幅の半分[6列]ずつ分かち合う＝横並びになる)
+    # 🛠️ 新規登録ボタンとログインボタンを最初から両方表示するように設定
+    register_btn.visible = True
+    login_btn.visible = True
+
+    # PCなら横並び、スマホなら縦並びにするレスポンシブ配置
+    # xs=12 (スマホ：1列を丸ごと専有＝縦並び) / md=6 (PC：半分ずつ専有＝横並び)
     action_buttons_row = ft.ResponsiveRow(
         controls=[
             ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
@@ -344,19 +347,16 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # ログイン・登録画面全体のレイアウト
+    # ログイン・登録画面全体のレイアウト（案内テキストや切り替えリンクをすべて撤去）
     login_view = ft.Container(
         content=ft.Column(
             controls=[
                 ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600),
-                login_title_text,
-                login_sub_text,
+                ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD),
+                ft.Container(height=15),
+                ft.Container(content=login_name_input, width=300), # 入力欄
                 ft.Container(height=10),
-                ft.Container(content=login_name_input, width=300), # 入力欄が広がりすぎないよう幅を固定
-                ft.Container(height=10),
-                ft.Container(content=action_buttons_row, width=340), # ボタン配置エリア
-                ft.Container(height=5),
-                switch_mode_link
+                ft.Container(content=action_buttons_row, width=340), # 2つのボタン
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -376,12 +376,7 @@ def main(page: ft.Page):
 
     calculate_total_score()
     
-    # 起動時に初訪問か判定して画面を初期化 (エラー回避・最新版)
-    if page.client_storage.get(STORAGE_FIRST_VISIT_KEY):
-        toggle_login_mode(True)
-    else:
-        toggle_login_mode(False)
-        
+    # 起動時の自動モード切替関数（toggle_login_mode）の呼び出しを廃止し、常に2つボタンを表示
     update_all_uis()
     page.add(login_view, main_tab_view)
     
