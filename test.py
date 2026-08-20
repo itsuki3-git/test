@@ -26,7 +26,7 @@ def main(page: ft.Page):
     login_title_text = ft.Text(value="プレイヤー登録", size=24, weight=ft.FontWeight.BOLD)
     login_sub_text = ft.Text(value="ゲームを始める前に名前を登録してください", size=14, color=ft.Colors.GREY_600)
 
-    register_btn = ft.ElevatedButton("登録してゲーム開始", icon=ft.Icons.PLAY_ARROW,
+    register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PLAY_ARROW,
                                      on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE,
                                      color=ft.Colors.WHITE, width=250, height=45)
     login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e),
@@ -207,17 +207,21 @@ def main(page: ft.Page):
         update_all_uis()
         show_alert(f"{deleted_name} さんのアカウントとすべての記録を完全に削除しました。", title="アカウント削除完了")
 
-    # ログアウト処理
+    # --- ログアウト処理（2つのボタンが確実に常時表示されるように修正） ---
     def handle_logout(e):
         nonlocal current_player
         current_player = None
+        
+        # ログイン画面を表示状態に戻し、計算画面を隠す
         login_view.visible = True
         main_tab_view.visible = False
-        if page.client_storage.get(STORAGE_FIRST_VISIT_KEY):
-            toggle_login_mode(True)
-        else:
-            toggle_login_mode(False)
+        
+        # ボタンエリアが非表示になってしまわないよう強制的に再表示
+        register_btn.visible = True
+        login_btn.visible = True
+        
         page.update()
+
 
     # 合計得点の計算・更新
     def calculate_total_score():
