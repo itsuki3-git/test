@@ -49,9 +49,10 @@ def main(page: ft.Page):
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     ranking_switch = ft.Switch(label="ランキングに名前と記録を表示する", value=True, on_change=lambda e: handle_privacy_change(e))
     
-    # リストビューにもスクロールモードを設定
-    my_records_list = ft.ListView(expand=True, spacing=10, padding=10, scroll=ft.ScrollMode.AUTO)
-    ranking_list = ft.ListView(expand=True, spacing=10, padding=10, scroll=ft.ScrollMode.AUTO)
+    # リストビューの定義（scrollの設定を消してスッキリさせます）
+    my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
+    ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
+
 
     # 🛠️ マイページ用：各種セキュリティ入力欄（ダイアログ内に格納するためシンプルに定義）
     mypage_old_pass = ft.TextField(label="現在のパスワード", password=True)
