@@ -12,8 +12,8 @@ def main(page: ft.Page):
     FRUIT_POINTS = {"apple": 10, "orange": 5, "grape": 15}
 
     # ==========================================
-    SUPABASE_URL = "https://supabase.co"
-    SUPABASE_KEY = "あなたのanon_keyまたはservice_role"
+    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # ==========================================
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
