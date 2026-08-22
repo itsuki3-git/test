@@ -603,36 +603,32 @@ def main(page: ft.Page):
         width=240
     )
 
-    # 💡【表形式UI】データテーブル（表）本体の定義
+    # 💡【表形式UI】データテーブル（表）本体の定義（列幅を％指定して最大化）
     admin_data_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD)),
+            # 💡 column_width を指定することで、ウィンドウの最大幅に合わせて列を自動で引き伸ばします
+            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), column_width=110),
+            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD), column_width=160),
+            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD), column_width=90),
         ],
         rows=[],
         heading_row_color=ft.Colors.BLUE_GREY_50,
         divider_thickness=1,
         horizontal_margin=10,
-        column_spacing=15,
+        column_spacing=10,
+        # 💡 表自体が親要素のサイズいっぱいに広がるように設定
         expand=True 
     )
 
-    # 💡【表形式UI】レイアウト構築
+    # 💡【表形式UI】レイアウト構築（横幅いっぱい＆全件スクロール）
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
             ft.Container(content=ft.Row([admin_sort_dropdown], alignment=ft.MainAxisAlignment.END), padding=ft.padding.only(right=5, bottom=5)),
             
-            # 💡 表自体の多重追加を防ぐため、ListViewの構造をシンプル化
+            # 💡 横スクロール用の ft.Row を撤去し、縦スクロール（ListView）の中で直接テーブルを横幅いっぱいにフィットさせます
             ft.ListView(
-                controls=[
-                    ft.Row(
-                        controls=[admin_data_table], 
-                        scroll=ft.ScrollMode.AUTO,
-                        alignment=ft.MainAxisAlignment.START
-                    )
-                ], 
+                controls=[admin_data_table], 
                 expand=True
             )
         ], expand=True
@@ -650,7 +646,6 @@ def main(page: ft.Page):
 
     calculate_total_score_ui_only()
     
-    # 💡【重要バグ修正】初期起動時に表が多重レンダリングされるのを防止する安全なフック構成
     def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
@@ -668,4 +663,5 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
 
