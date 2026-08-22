@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-       # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
+    # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
     def get_jst_now_str() -> str:
         from datetime import timezone, timedelta
         jst = timezone(timedelta(hours=9))
@@ -95,11 +95,9 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
-            # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                ranking_switch.value = priv_res.data.get("is_visible", True)
             else:
                 ranking_switch.value = True
 
@@ -151,14 +149,15 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
-            # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data[0].get("secret_question") or ""
+                mypage_question_input.value = res.data.get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
+            
+        # 💡【確実な画面切り替え】ログイン画面を隠し、共通ヘッダー付きメインビューを表示！
         login_view.visible = False
-        main_tab_view.visible = True
+        authenticated_view.visible = True
         
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
@@ -180,15 +179,25 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                        ranking_switch.value = priv_res.data.get("is_visible", True)
                     else:
                         ranking_switch.value = True
 
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
+
+    # --- ログアウト処理 ---
+    def handle_logout(e):
+        nonlocal current_player
+        current_player = None
+        login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
+        login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
+        # 💡【確実な画面切り替え】ログアウト時はメインビューを隠し、ログイン画面を表示！
+        login_view.visible = True
+        authenticated_view.visible = False
+        page.update()
 
 
     # --- マイページでのパスワード変更処理 ---
