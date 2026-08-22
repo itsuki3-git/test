@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-    # --- 既存ユーザーのログイン（リスト型バグを完全排除） ---
+    # --- 既存ユーザーのログイン ---
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -82,7 +82,7 @@ def main(page: ft.Page):
             hashed_pass = hash_password(input_pass)
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
 
-            # 💡【重要バグ修正】データが正しく取得できているかをリストの件数で厳密にチェック
+            # 💡【完全修正】リストが空、またはデータが1件もない場合は弾く
             if not res.data or len(res.data) == 0:
                 show_alert("名前またはパスワードが間違っています。")
                 return
@@ -90,8 +90,9 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
-            # プライバシー設定の読み込みも安全に1件目から取得
+            # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
+            # 💡【完全修正】リストの0番目（最初の1件）から安全に値を取り出す
             if priv_res.data and len(priv_res.data) > 0:
                 ranking_switch.value = priv_res.data[0].get("is_visible", True)
             else:
@@ -110,6 +111,7 @@ def main(page: ft.Page):
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
         
+        # adminという名前での登録をブロック
         if input_name.lower() == "admin":
             show_alert("「admin」という名前は管理者専用のため登録できません。")
             return
@@ -143,8 +145,8 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
+            # 💡【完全修正】リストの0番目の辞書から安全に質問文を取得
             if res.data and len(res.data) > 0:
-                # 💡【重要バグ修正】リストの[0]番目から安全に辞書を取得
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
@@ -152,7 +154,7 @@ def main(page: ft.Page):
         login_view.visible = False
         main_tab_view.visible = True
         
-        # 💡 管理者タブの表示切り替え
+        # 管理者タブの制御
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 4:
@@ -173,6 +175,7 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                    # 💡【完全修正】リストの0番目の辞書から設定を取得
                     if priv_res.data and len(priv_res.data) > 0:
                         ranking_switch.value = priv_res.data[0].get("is_visible", True)
                     else:
@@ -181,7 +184,6 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-    
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
