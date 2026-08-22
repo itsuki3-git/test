@@ -530,7 +530,7 @@ def main(page: ft.Page):
             elif sort_val == "score_desc":
                 summary_data.sort(key=lambda x: x["max_score"], reverse=True)
 
-            # 💡 画面のデータテーブルに行を追加していく
+             # 💡 画面のデータテーブルに行を追加していく（セルの文字に幅を持たせて綺麗に整列）
             for data in summary_data:
                 is_admin = (data["username"].lower() == "admin")
                 name_display = f"👑 {data['username']}" if is_admin else data["username"]
@@ -538,12 +538,14 @@ def main(page: ft.Page):
                 admin_data_table.rows.append(
                     ft.DataRow(
                         cells=[
-                            ft.DataCell(ft.Text(name_display, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
-                            ft.DataCell(ft.Text(data["latest_date"], size=12)),
-                            ft.DataCell(ft.Text(f"{data['max_score']}点", weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
+                            # 💡 各セルのft.Textに width を仕込むことで、column_widthの代わりに安全に幅を広げます
+                            ft.DataCell(ft.Text(name_display, width=120, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
+                            ft.DataCell(ft.Text(data["latest_date"], width=170, size=12)),
+                            ft.DataCell(ft.Text(f"{data['max_score']}点", width=100, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
                         ]
                     )
                 )
+
         except Exception as ex:
             # エラー時はテーブルの代わりにテキストを表示するため、行にエラーを載せる
             admin_data_table.rows.append(
@@ -593,30 +595,26 @@ def main(page: ft.Page):
         width=240
     )
 
-    # 💡【表形式UI】データテーブル（表）本体の定義（列幅を％指定して最大化）
+    # 💡【表形式UI】データテーブル（表）本体の定義（column_widthを削除してバグを修正）
     admin_data_table = ft.DataTable(
         columns=[
-            # 💡 column_width を指定することで、ウィンドウの最大幅に合わせて列を自動で引き伸ばします
-            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), column_width=110),
-            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD), column_width=160),
-            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD), column_width=90),
+            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD)),
         ],
         rows=[],
         heading_row_color=ft.Colors.BLUE_GREY_50,
         divider_thickness=1,
         horizontal_margin=10,
         column_spacing=10,
-        # 💡 表自体が親要素のサイズいっぱいに広がるように設定
         expand=True 
     )
 
-    # 💡【表形式UI】レイアウト構築（横幅いっぱい＆全件スクロール）
+    # 💡【表形式UI】レイアウト構築
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
             ft.Container(content=ft.Row([admin_sort_dropdown], alignment=ft.MainAxisAlignment.END), padding=ft.padding.only(right=5, bottom=5)),
-            
-            # 💡 横スクロール用の ft.Row を撤去し、縦スクロール（ListView）の中で直接テーブルを横幅いっぱいにフィットさせます
             ft.ListView(
                 controls=[admin_data_table], 
                 expand=True
@@ -653,5 +651,4 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
 
