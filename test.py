@@ -267,7 +267,7 @@ def main(page: ft.Page):
         page.update()
 
 
-    # --- パスワードリセット実行（修正版） ---
+        # --- パスワードリセット実行（修正・バグ完全排除版） ---
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -280,8 +280,9 @@ def main(page: ft.Page):
             return
         try:
             res = supabase.table("users").select("secret_answer").eq("username", name).execute()
-            # 💡【セキュリティ強化】入力された答えをハッシュ化し、DB内のハッシュ値と比較
-            if not res.data or res.data.get("secret_answer") != hash_password(ans):
+            
+            # 💡【重要バグ修正】res.data[0] から辞書を取り出して安全に回答を比較する
+            if not res.data or res.data[0].get("secret_answer") != hash_password(ans):
                 show_alert("質問の答えが間違っています。")
                 return
 
@@ -301,6 +302,7 @@ def main(page: ft.Page):
             show_alert("パスワードを再設定しました！ログイン画面から新しいパスワードでログインしてください。", title="再設定完了")
         except Exception as ex:
             show_alert(f"リセット失敗: {ex}")
+
 
     # --- 名前の変更処理 ---
     def handle_rename(e):
