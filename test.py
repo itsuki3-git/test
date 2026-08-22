@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-     # --- 既存ユーザーのログイン ---
+    # --- 既存ユーザーのログイン（リスト型バグを完全排除） ---
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -82,16 +82,20 @@ def main(page: ft.Page):
             hashed_pass = hash_password(input_pass)
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
 
-            if not res.data:
+            # 💡【重要バグ修正】データが正しく取得できているかをリストの件数で厳密にチェック
+            if not res.data or len(res.data) == 0:
                 show_alert("名前またはパスワードが間違っています。")
                 return
 
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
+            # プライバシー設定の読み込みも安全に1件目から取得
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
-            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+            if priv_res.data and len(priv_res.data) > 0:
+                ranking_switch.value = priv_res.data[0].get("is_visible", True)
+            else:
+                ranking_switch.value = True
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -115,7 +119,7 @@ def main(page: ft.Page):
             return
         try:
             res = supabase.table("users").select("username").eq("username", input_name).execute()
-            if res.data:
+            if res.data and len(res.data) > 0:
                 show_alert("その名前はすでに使用されています。")
                 return
 
@@ -139,8 +143,8 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
-            if res.data:
-                # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
+            if res.data and len(res.data) > 0:
+                # 💡【重要バグ修正】リストの[0]番目から安全に辞書を取得
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
@@ -148,6 +152,7 @@ def main(page: ft.Page):
         login_view.visible = False
         main_tab_view.visible = True
         
+        # 💡 管理者タブの表示切り替え
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 4:
@@ -166,13 +171,17 @@ def main(page: ft.Page):
             try:
                 hashed_pass = hash_password(saved_pass)
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
-                if res.data:
+                if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
-                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+                    if priv_res.data and len(priv_res.data) > 0:
+                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                    else:
+                        ranking_switch.value = True
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
+
+    
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
