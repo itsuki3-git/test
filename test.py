@@ -469,72 +469,69 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-    # 💡【管理者用機能】管理者タブの情報をリフレッシュする処理
-    def update_admin_ui():
+    # 💡【管理者用機能】管理者タブの情報をリフレッシュ＆ソートして描画する処理
+    def update_admin_ui(e=None):
         if current_player != "admin": return
         admin_users_list.controls.clear()
         try:
-            # 全ユーザーと全記録を取得
+            # データベースから全ユーザーと全ゲーム記録を取得
             users_res = supabase.table("users").select("username").execute()
             records_res = supabase.table("records").select("*").execute()
             
             all_users = users_res.data or []
             all_records = records_res.data or []
             
-            # 1. 登録プレイヤー一覧の描画
-            admin_users_list.controls.append(ft.Text(f"👥 登録プレイヤー数: {len(all_users)}人", weight=ft.FontWeight.BOLD, size=14))
+            # 各ユーザーの最高得点と最新ログイン（記録）日時を計算してまとめる
+            summary_data = []
             for u in all_users:
-                # admin自身は削除できないようにガード
-                is_admin_user = (u["username"].lower() == "admin")
-                admin_users_list.controls.append(
-                    ft.ListTile(
-                        leading=ft.Icon(ft.Icons.PERSON if not is_admin_user else ft.Icons.SUPERVISED_USER_CIRCLE),
-                        title=ft.Text(u["username"]),
-                        trailing=None if is_admin_user else ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINED,
-                            icon_color=ft.Colors.RED_600,
-                            tooltip="プレイヤーを強制削除",
-                            on_click=lambda e, name=u["username"]: delete_user_by_admin(name)
-                        )
-                    )
-                )
+                username = u["username"]
+                user_records = [r for r in all_records if r["player"] == username]
+                
+                # 最高得点の算出（記録がない場合は0点）
+                max_score = max([r["final_score"] for r in user_records]) if user_records else 0
+                # 最新ゲーム日時の算出（ログイン日時の代わりとして最新の記録日時を使用。ない場合は「なし」）
+                latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
+                
+                summary_data.append({
+                    "username": username,
+                    "max_score": max_score,
+                    "latest_date": latest_date
+                })
             
-            # 2. 全プレイヤーのゲーム結果ログの描画
-            admin_records_list.controls.clear()
-            admin_records_list.controls.append(ft.Text(f"📊 全ゲーム記録数: {len(all_records)}件", weight=ft.FontWeight.BOLD, size=14))
-            for r in sorted(all_records, key=lambda x: x["id"], reverse=True):
-                admin_records_list.controls.append(
+            # ドロップダウンの選択値に応じてソートを実行
+            sort_val = admin_sort_dropdown.value
+            if sort_val == "name_asc":
+                summary_data.sort(key=lambda x: x["username"])
+            elif sort_val == "name_desc":
+                summary_data.sort(key=lambda x: x["username"], reverse=True)
+            elif sort_val == "date_asc":
+                summary_data.sort(key=lambda x: x["latest_date"])
+            elif sort_val == "date_desc":
+                summary_data.sort(key=lambda x: x["latest_date"], reverse=True)
+            elif sort_val == "score_asc":
+                summary_data.sort(key=lambda x: x["max_score"])
+            elif sort_val == "score_desc":
+                summary_data.sort(key=lambda x: x["max_score"], reverse=True)
+
+            # 画面への描画処理
+            for data in summary_data:
+                is_admin_user = (data["username"].lower() == "admin")
+                admin_users_list.controls.append(
                     ft.Container(
                         content=ft.Row([
+                            ft.Icon(ft.Icons.SUPERVISED_USER_CIRCLE if is_admin_user else ft.Icons.PERSON, color=ft.Colors.BLUE_600 if is_admin_view_btn else ft.Colors.BLUE_GREY_400),
                             ft.Column([
-                                ft.Text(f"プレイヤー: {r['player']}", size=14, weight=ft.FontWeight.W_500),
-                                ft.Text(f"得点: {r['final_score']} 点 (🍎{r['apple']} 🍊{r['orange']} 🍇{r['grape']})", size=12, color=ft.Colors.GREY_700),
-                                ft.Text(f"日時: {r['date']}", size=10, color=ft.Colors.GREY_500)
-                            ], expand=True),
-                            ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, idx=r["id"]: delete_record_by_admin(idx))
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        padding=8, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=6, bgcolor=ft.Colors.GREY_50
+                                ft.Text(f"👤 {data['username']}", size=15, weight=ft.FontWeight.BOLD),
+                                ft.Text(f"📅 最新記録日時: {data['latest_date']}", size=12, color=ft.Colors.GREY_600),
+                                ft.Text(f"🏆 最高得点: {data['max_score']} 点", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700),
+                            ], expand=True)
+                        ]),
+                        padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=8, bgcolor=ft.Colors.WHITE
                     )
                 )
         except Exception as ex:
             admin_users_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
         page.update()
-
-    # 💡【管理者用機能】指定したユーザーを強制削除
-    def delete_user_by_admin(username):
-        try:
-            supabase.table("users").delete().eq("username", username).execute()
-            update_all_uis()
-        except Exception:
-            pass
-
-    # 💡【管理者用機能】指定したゲーム記録を強制削除
-    def delete_record_by_admin(target_id):
-        try:
-            supabase.table("records").delete().eq("id", target_id).execute()
-            update_all_uis()
-        except Exception:
-            pass
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
@@ -561,34 +558,46 @@ def main(page: ft.Page):
 
     action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
 
-    # 💡【管理者対応】管理者専用タブ内のリスト表示コンポーネント
-    admin_users_list = ft.ListView(spacing=5, padding=5, height=200)
-    admin_records_list = ft.ListView(spacing=10, padding=5, expand=True)
+    # 💡【管理者用UI】並び替え選択用のドロップダウンメニュー
+    admin_sort_dropdown = ft.Dropdown(
+        label="表示の並び替え",
+        value="score_desc",  # 初期値は最高得点の高い順
+        options=[
+            ft.dropdown.Option("score_desc", "最高得点（高い順）"),
+            ft.dropdown.Option("score_asc", "最高得点（低い順）"),
+            ft.dropdown.Option("date_desc", "最新記録日時（新しい順）"),
+            ft.dropdown.Option("date_asc", "最新記録日時（古い順）"),
+            ft.dropdown.Option("name_asc", "プレイヤー名（A-Z / 50音順）"),
+            ft.dropdown.Option("name_desc", "プレイヤー名（Z-A / 逆順）"),
+        ],
+        on_change=update_admin_ui,
+        width=260
+    )
 
-    # 💡【管理者対応】管理者タブのレイアウト構築
+    # 💡【管理者用UI】スクロール可能なプレイヤー情報リスト
+    admin_users_list = ft.ListView(spacing=10, padding=5, expand=True)
+
+    # 💡【管理者用UI】レイアウト構築（ユーザー削除ボタンを撤去し、ソート配置）
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
-            ft.Container(content=admin_users_list, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=8, padding=5, bgcolor=ft.Colors.WHITE),
-            ft.Divider(height=15),
-            ft.Container(content=admin_records_list, expand=True)
-        ], expand=True, scroll=ft.ScrollMode.AUTO
+            ft.Container(content=ft.Row([admin_sort_dropdown], alignment=ft.MainAxisAlignment.END), padding=ft.padding.only(right=5, bottom=5)),
+            ft.Container(content=admin_users_list, expand=True)
+        ], expand=True
     )
 
     # --- 各種表示構築 ---
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
-    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
+    calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リreset", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
     mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)), ft.Container(content=my_records_list, expand=True), ft.Container(height=5), ft.Container(content=ft.Row([ft.Text("各種設定を開く:", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_500), ft.Row([ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_600)], spacing=1)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=8, bgcolor=ft.Colors.GREY_100, border_radius=10, border=ft.border.all(1, ft.Colors.GREY_300)),], expand=True, scroll=ft.ScrollMode.AUTO)
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)], expand=True, scroll=ft.ScrollMode.AUTO)
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True, visible=False)
 
-    # UIコンポーネントを画面に追加
     page.add(login_view, main_tab_view)
 
     calculate_total_score_ui_only()
     
-    # 💡【管理者対応】UIリフレッシュに管理画面の更新を統合
     def update_all_uis_with_admin():
         update_my_records_ui()
         update_ranking_ui()
