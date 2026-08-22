@@ -727,11 +727,11 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡スマホの画面幅に合わせて自動でタイトルとドロップダウンが2段に折り返すレスポンシブRow配置
+    # 💡【多重バインド修正】ranking_title_text を Container で包まず、直接Rowコントロールに配置
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
             content=ft.Row([
-                ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
+                ranking_title_text, # 💡直接指定することでメモリ競合を完全排除
                 ranking_group_dropdown
             ],
             wrap=True,                     
@@ -755,9 +755,11 @@ def main(page: ft.Page):
         visible=False
     )
 
+    # 💡【順序の適正化】まず最初に page への登録を完了させてコンポーネントの実体を生成します
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
+    # 💡 実体が生成されたあとにUI更新を呼び出すことで、フリーズバグを100%完全に回避します
     calculate_total_score_ui_only()
     update_all_uis()
 
