@@ -448,7 +448,12 @@ def main(page: ft.Page):
     def save_current_game(e):
         if not current_player: return
         total_score = (counts["apple"] * FRUIT_POINTS["apple"] + counts["orange"] * FRUIT_POINTS["orange"] + counts["grape"] * FRUIT_POINTS["grape"])
-        date_str = datetime.now().strftime("%Y/%m/%d %H:%M")
+        
+        # 💡【日本時間固定】サーバー環境に関わらず確実に日本時間(JST)で日時を生成
+        from datetime import timezone, timedelta
+        jst = timezone(timedelta(hours=9))
+        date_str = datetime.now(jst).strftime("%Y/%m/%d %H:%M")
+        
         try:
             supabase.table("records").insert({
                 "player": current_player, "final_score": total_score, "apple": counts["apple"],
@@ -461,6 +466,7 @@ def main(page: ft.Page):
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
         page.update()
+
 
     def delete_saved_record(target_id):
         try:
