@@ -55,7 +55,7 @@ def main(page: ft.Page):
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
     
-    # ランキング用の上部コンポーネント定義
+    # ランキング表示パーツの定義
     ranking_title_text = ft.Text(value="総合ハイスコアランキング (グループ1)", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
     ranking_group_dropdown = ft.Dropdown(
         label="表示グループ切り替え",
@@ -70,7 +70,6 @@ def main(page: ft.Page):
     mypage_question_input = ft.TextField(label="新しく登録する「秘密の質問」", hint_text="例: 初めて飼ったペットの名前は？")
     mypage_answer_input = ft.TextField(label="質問の答え", hint_text="答えを入力してください")
 
-    # --- 共通ユーティリティ関数 ---
     def show_alert(message, title="エラー"):
         alert_dialog = ft.AlertDialog(title=ft.Text(title), content=ft.Text(message))
         alert_dialog.actions = [ft.TextButton("OK", on_click=lambda e: (setattr(alert_dialog, "open", False), page.update()))]
@@ -83,7 +82,7 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # --- 1. [順序適正化] フルーツ選択ボタンの生成ヘルパー関数 ---
+    # --- 1. フルーツ選択ボタンの生成ヘルパー関数 ---
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
@@ -162,12 +161,19 @@ def main(page: ft.Page):
     # --- 4. 全体のランキング描画更新（複数グループ・切り替え対応版） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-        ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+        
+        # 💡 表示文言のグループ0対応
+        if active_ranking_group == 0:
+            ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者用)"
+        else:
+            ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+            
         try:
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
             hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
             
+            # 各個人のカンマ区切り文字列を分解し、現在選択中のグループに含まれているユーザーを抽出
             same_group_users = []
             for p in privacy_list:
                 user_name = p.get("username")
@@ -244,17 +250,42 @@ def main(page: ft.Page):
     # --- 1. ランキング用のドロップダウン同期と切り替え処理 ---
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
-        for g in my_group_list:
-            ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
         
-        if my_group_list:
+        # 💡【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
+        if current_player == "admin":
+            try:
+                all_priv = supabase.table("privacy").select("group_number").execute()
+                detected_groups = set()
+                for p in (all_priv.data or []):
+                    for token in str(p.get("group_number", "1")).replace("，", ",").split(","):
+                        t_strip = token.strip()
+                        if t_strip.isdigit():
+                            detected_groups.add(int(t_strip))
+                
+                detected_groups.add(0) # 管理者自身をグループ0に固定するため、0も含める
+                
+                for g in sorted(list(detected_groups)):
+                    label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+            except Exception:
+                ranking_group_dropdown.options.append(ft.dropdown.Option("0", "グループ 0 (管理者専用)"))
+        else:
+            # 一般プレイヤーは自分が所属しているグループ群だけを表示
+            for g in my_group_list:
+                ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
+        
+        # 表示グループの初期選択を安全にバインド
+        if current_player == "admin":
+            ranking_group_dropdown.value = str(active_ranking_group)
+        elif my_group_list:
             if active_ranking_group in my_group_list:
                 ranking_group_dropdown.value = str(active_ranking_group)
             else:
-                set_active_group(my_group_list[0])
+                set_active_group(my_group_list)
         else:
             ranking_group_dropdown.value = "1"
             set_active_group(1)
+        page.update()
 
     def set_active_group(g_num):
         nonlocal active_ranking_group
@@ -270,7 +301,7 @@ def main(page: ft.Page):
 
     # --- 2. 既存ユーザーのログイン ---
     def handle_existing_login(e):
-        nonlocal current_player, my_group_list
+        nonlocal current_player, my_group_list, active_ranking_group
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -288,9 +319,14 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                ranking_switch.value = priv_res.data.get("is_visible", True)
+                raw_group_str = str(priv_res.data.get("group_number", "1"))
                 
-                raw_group_str = str(priv_res.data[0].get("group_number", "1"))
+                # 💡 adminの場合は強制的にグループ0に固定・同期
+                if input_name.lower() == "admin":
+                    raw_group_str = "0"
+                    supabase.table("privacy").update({"group_number": "0"}).eq("username", "admin").execute()
+                
                 mypage_group_input.value = raw_group_str
                 
                 my_group_list = []
@@ -302,8 +338,18 @@ def main(page: ft.Page):
                     my_group_list = [1]
             else:
                 ranking_switch.value = True
-                my_group_list = [1]
-                mypage_group_input.value = "1"
+                if input_name.lower() == "admin":
+                    my_group_list = [0]
+                    mypage_group_input.value = "0"
+                    supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
+                else:
+                    my_group_list = [1]
+                    mypage_group_input.value = "1"
+            
+            if input_name.lower() == "admin":
+                active_ranking_group = 0  # 管理者の初期値はグループ0
+            else:
+                active_ranking_group = my_group_list[0] if my_group_list else 1
                 
             refresh_ranking_dropdown_options()
         except Exception as ex:
@@ -313,7 +359,7 @@ def main(page: ft.Page):
 
     # --- 3. 新規プレイヤーの登録 ---
     def handle_new_register(e):
-        nonlocal current_player, my_group_list
+        nonlocal current_player, my_group_list, active_ranking_group
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -340,6 +386,7 @@ def main(page: ft.Page):
             ranking_switch.value = True
             my_group_list = [1]
             mypage_group_input.value = "1"
+            active_ranking_group = 1
             refresh_ranking_dropdown_options()
         except Exception as ex:
             show_alert(f"登録エラー: {ex}")
@@ -355,7 +402,7 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data[0].get("secret_question") or ""
+                mypage_question_input.value = res.data.get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
@@ -375,7 +422,7 @@ def main(page: ft.Page):
 
     # --- 5. 自動ログイン処理 ---
     def check_auto_login():
-        nonlocal my_group_list
+        nonlocal my_group_list, active_ranking_group
         saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
         saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
         if saved_user and saved_pass:
@@ -385,9 +432,13 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                        ranking_switch.value = priv_res.data.get("is_visible", True)
+                        raw_group_str = str(priv_res.data.get("group_number", "1"))
                         
-                        raw_group_str = str(priv_res.data[0].get("group_number", "1"))
+                        if saved_user.lower() == "admin":
+                            raw_group_str = "0"
+                            supabase.table("privacy").update({"group_number": "0"}).eq("username", "admin").execute()
+                            
                         mypage_group_input.value = raw_group_str
                         
                         my_group_list = []
@@ -399,8 +450,18 @@ def main(page: ft.Page):
                             my_group_list = [1]
                     else:
                         ranking_switch.value = True
-                        my_group_list = [1]
-                        mypage_group_input.value = "1"
+                        if saved_user.lower() == "admin":
+                            my_group_list = [0]
+                            mypage_group_input.value = "0"
+                        else:
+                            my_group_list = [1]
+                            mypage_group_input.value = "1"
+                        
+                    if saved_user.lower() == "admin":
+                        active_ranking_group = 0
+                    else:
+                        active_ranking_group = my_group_list[0] if my_group_list else 1
+                        
                     refresh_ranking_dropdown_options()
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
@@ -461,7 +522,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
-    # --- 3. マイページでのグループ番号の保存処理 ---
+    # --- 3. マイページでのグループ番号の保存処理（セキュリティ強化版） ---
     def handle_save_group_number(e):
         nonlocal my_group_list
         grp_str = mypage_group_input.value.strip()
@@ -476,7 +537,14 @@ def main(page: ft.Page):
                 if not x_strip.isdigit():
                     show_alert("グループ番号には半角数字とカンマのみを入力してください。")
                     return
-                parsed_list.append(int(x_strip))
+                
+                group_num = int(x_strip)
+                # 💡【管理者セキュリティガード】一般ユーザーが「0」を入力した場合は即座に弾く
+                if current_player != "admin" and group_num == 0:
+                    show_alert("「グループ0」は管理者専用の所属枠です。他のグループ番号を設定してください。")
+                    return
+                    
+                parsed_list.append(group_num)
                 
         if not parsed_list:
             show_alert("有効なグループ番号が見つかりませんでした。")
@@ -745,28 +813,22 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【UI改善版】スマホでも絶対に見切れない＆上下に自動整列するランキング画面
+    # 💡【見切れ完全解消レスポンシブRow】タイトルとドロップダウンがスマホ幅で美しく自動で2段に折り返します
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
-            content=ft.Row(
-                controls=[
-                    # 💡 タイトルが長い場合でもスマホの幅に収まるよう自動的に縮小・折り返しを許可
-                    ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
-                    
-                    # 💡 切り替えドロップダウンメニュー
-                    ranking_group_dropdown
-                ],
-                wrap=True,                     # 💡 画面幅が狭くなったら自動的に上下2段に折り返す魔法のフラグ
-                spacing=10,                    # 横並びのときの隙間
-                run_spacing=10,                # 💡 スマホで縦並び（2段）になったときの上下の隙間
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ),
+            content=ft.Row([
+                ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
+                ranking_group_dropdown
+            ],
+            wrap=True,                     
+            spacing=10,                    
+            run_spacing=10,                
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=15
         ),
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
-
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
@@ -794,4 +856,3 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
