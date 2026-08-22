@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-       # --- 既存ユーザーのログイン ---
+     # --- 既存ユーザーのログイン ---
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -90,33 +90,8 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
-        except Exception as ex:
-            show_alert(f"ログインエラー: {ex}")
-            return
-        enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
-
-    # --- 既存ユーザーのログイン ---
-    def handle_existing_login(e):
-        nonlocal current_player
-        input_name = login_name_input.value.strip()
-        input_pass = login_pass_input.value.strip()
-        if not input_name or not input_pass:
-            show_alert("プレイヤー名とパスワードを入力してください。")
-            return
-        try:
-            hashed_pass = hash_password(input_pass)
-            res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
-
-            if not res.data:
-                show_alert("名前またはパスワードが間違っています。")
-                return
-
-            page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
-            page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
-
-            priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+            # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
+            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -131,7 +106,6 @@ def main(page: ft.Page):
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
         
-        # 💡【重要】一般ユーザーによる 'admin' 名義での登録を完全にブロック
         if input_name.lower() == "admin":
             show_alert("「admin」という名前は管理者専用のため登録できません。")
             return
@@ -166,18 +140,18 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data:
-                mypage_question_input.value = res.data.get("secret_question") or ""
+                # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
+                mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
         login_view.visible = False
         main_tab_view.visible = True
         
-        # 💡【管理者対応】ログインしたのが admin の場合のみ「管理者ページ」タブを出現させる
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 4:
-            main_tab_view.tabs.pop() # 一般ユーザーなら管理者タブを消去
+            main_tab_view.tabs.pop()
             
         reset_current_game(None)
         update_all_uis()
@@ -194,11 +168,11 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+                    # 💡【重要バグ修正】リストの先頭要素 [0] から安全に値を読み込む
+                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
-
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
