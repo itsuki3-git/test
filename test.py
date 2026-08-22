@@ -84,13 +84,12 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡【新規追加】ランキング画面のドロップダウンの選択肢を、自分が所属しているグループ群で自動更新するヘルパー関数
+    # --- 1. ランキング用のドロップダウン同期と切り替え処理 ---
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
         for g in my_group_list:
             ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
         
-        # 現在表示中のグループがリスト内にあれば維持、なければ先頭のグループを表示
         if my_group_list:
             if active_ranking_group in my_group_list:
                 ranking_group_dropdown.value = str(active_ranking_group)
@@ -101,21 +100,20 @@ def main(page: ft.Page):
             set_active_group(1)
 
     def set_active_group(g_num):
-        global active_ranking_group
+        nonlocal active_ranking_group
         try:
             active_ranking_group = int(g_num)
         except Exception:
             active_ranking_group = 1
 
-    # 💡【新規追加】ランキング切り替えドロップダウンが操作されたときの処理
     def handle_ranking_group_switch(e):
         nonlocal active_ranking_group
         set_active_group(e.control.value)
         update_ranking_ui()
 
-    # --- 既存ユーザーのログイン ---
+    # --- 2. 既存ユーザーのログイン ---
     def handle_existing_login(e):
-        nonlocal current_player, current_group, my_group_list
+        nonlocal current_player, my_group_list  # 💡 エラーの原因だった「current_group」を除去しました
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -133,10 +131,9 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data.get("is_visible", True)
+                ranking_switch.value = priv_res.data[0].get("is_visible", True)
                 
-                # 💡【複数設定対応】カンマ区切りの文字列（例: "1,2,3"）から、数字のリストへ分解・復元して記憶
-                raw_group_str = str(priv_res.data.get("group_number", "1"))
+                raw_group_str = str(priv_res.data[0].get("group_number", "1"))
                 mypage_group_input.value = raw_group_str
                 
                 my_group_list = []
@@ -152,15 +149,14 @@ def main(page: ft.Page):
                 mypage_group_input.value = "1"
                 
             refresh_ranking_dropdown_options()
-
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
-    # --- 新規プレイヤーの登録 ---
+    # --- 3. 新規プレイヤーの登録 ---
     def handle_new_register(e):
-        nonlocal current_player, current_group, my_group_list
+        nonlocal current_player, my_group_list  # 💡 エラーの原因だった「current_group」を除去しました
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -180,7 +176,6 @@ def main(page: ft.Page):
 
             hashed_pass = hash_password(input_pass)
             supabase.table("users").insert({"username": input_name, "password": hashed_pass}).execute()
-            # 初期グループ文字列 '1' として作成
             supabase.table("privacy").insert({"username": input_name, "is_visible": True, "group_number": "1"}).execute()
 
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
@@ -194,7 +189,7 @@ def main(page: ft.Page):
             return
         enter_game_session(input_name, f"🎉 新しいプレイヤー {input_name} さんを登録しました！")
 
-    # --- セッション開始共通処理 ---
+    # --- 4. セッション開始共通処理 ---
     def enter_game_session(username, success_message):
         nonlocal current_player
         current_player = username
@@ -203,7 +198,7 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data.get("secret_question") or ""
+                mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
@@ -221,7 +216,7 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
 
-    # --- 自動ログイン処理 ---
+    # --- 5. 自動ログイン処理 ---
     def check_auto_login():
         nonlocal my_group_list
         saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
@@ -233,9 +228,9 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data.get("is_visible", True)
+                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
                         
-                        raw_group_str = str(priv_res.data.get("group_number", "1"))
+                        raw_group_str = str(priv_res.data[0].get("group_number", "1"))
                         mypage_group_input.value = raw_group_str
                         
                         my_group_list = []
@@ -254,7 +249,7 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-    # --- ログアウト処理 ---
+    # --- 6. ログアウト処理 ---
     def handle_logout(e):
         nonlocal current_player
         current_player = None
@@ -264,6 +259,7 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         page.update()
 
+    
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
