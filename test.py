@@ -718,13 +718,13 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # 💡【順序の適正化】まず最初に page への登録を完了させてコンポーネントの実体を生成します
+       # (プログラムの最下部付近)
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # 💡 実体が生成されたあとにUI更新を呼び出すことで、フリーズバグを100%完全に回避します
     calculate_total_score_ui_only()
     update_all_uis()
+    refresh_ranking_dropdown_options()  # 💡【追記】起動時にドロップダウンを強制同期させる
 
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
