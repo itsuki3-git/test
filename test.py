@@ -508,9 +508,30 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
+    # =========================================================================
+    # 💡【第4分冊のすぐ後ろ】ここから下に隙間なく上書きしてください
+    # =========================================================================
+
     # --- 1. 最初に関数やソート変数をすべて定義（順序バグを完全封殺） ---
     current_sort_column = 3  
     current_sort_ascending = False  
+
+    # 💡【復活・最重要】エラーの原因だった関数定義をここに確実に配置します
+    def create_fruit_selector(label, fruit_key, count_text_component, color):
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True),
+                    ft.Row(
+                        controls=[
+                            ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)),
+                            count_text_component,
+                            ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))
+                        ], spacing=5
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+        )
 
     # 💡【管理者用機能】ヘッダーの列名クリック時に呼び出されるソートトリガー関数
     def handle_admin_table_sort(e):
@@ -524,7 +545,7 @@ def main(page: ft.Page):
         admin_data_table.sort_ascending = current_sort_ascending
         update_admin_ui()
 
-    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理（検索バグ完全解消版）
+    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理
     def update_admin_ui():
         if current_player != "admin": return
         admin_data_table.rows.clear()
@@ -538,8 +559,6 @@ def main(page: ft.Page):
             group_map = {p["username"]: p.get("group_number", 1) for p in all_privacy}
             summary_data = []
             
-            # 💡【検索バグの完全修正】外のスコープの admin_search_input を確実、かつ安全に参照します
-            search_keyword = admin_search_input.value.strip().lower() if "admin_search_input" in globals() or "admin_search_input" in locals() or "admin_search_input" in main.__code__.co_varnames or True else ""
             try:
                 search_keyword = admin_search_input.value.strip().lower()
             except Exception:
@@ -547,8 +566,6 @@ def main(page: ft.Page):
 
             for u in all_users:
                 username = u["username"]
-                
-                # キーワード絞り込み
                 if search_keyword and search_keyword not in username.lower():
                     continue
                     
@@ -620,12 +637,14 @@ def main(page: ft.Page):
 
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), setattr(forgot_dialog, "open", True), page.update()))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     
+    # 💡 上方で定義された create_fruit_selector を安全に呼び出します
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
         ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
-        ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
+        ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リreset", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
     
+    # 💡【Flet 0.28.3仕様】文字を白くくっきりさせ、スマホでもアイコンが美しく自動折り返し（wrap=True）するマイページ設定
     mypage_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
         ft.Container(content=my_records_list, expand=True), 
@@ -643,7 +662,7 @@ def main(page: ft.Page):
                         ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: (setattr(privacy_setting_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: (setattr(confirm_delete_dialog, "open", True), page.update()), icon_color=ft.Colors.RED_300, icon_size=26)
                     ],
-                    wrap=True,  # 💡 Flet 0.28.3に完全に適合した自動折り返しプロパティ
+                    wrap=True,  # 💡 画面幅に合わせて自動で美しく折り返すプロパティ
                     spacing=8,
                     run_spacing=5,
                     alignment=ft.MainAxisAlignment.START
