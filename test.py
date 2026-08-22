@@ -95,9 +95,10 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
+            # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data.get("is_visible", True)
+                ranking_switch.value = priv_res.data[0].get("is_visible", True)
             else:
                 ranking_switch.value = True
 
@@ -149,13 +150,14 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
+            # 💡【ここが本当のバグ原因でした！】
+            # リストの0番目(res.data[0])を指定してから get() を使うように修正し、クラッシュを完全阻止
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data.get("secret_question") or ""
+                mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
             
-        # 💡【確実な画面切り替え】ログイン画面を隠し、共通ヘッダー付きメインビューを表示！
         login_view.visible = False
         authenticated_view.visible = True
         
@@ -180,7 +182,7 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data.get("is_visible", True)
+                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
                     else:
                         ranking_switch.value = True
 
@@ -194,11 +196,9 @@ def main(page: ft.Page):
         current_player = None
         login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
         login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
-        # 💡【確実な画面切り替え】ログアウト時はメインビューを隠し、ログイン画面を表示！
         login_view.visible = True
         authenticated_view.visible = False
         page.update()
-
 
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
