@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-        # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
+    # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
     def get_jst_now_str() -> str:
         from datetime import timezone, timedelta
         jst = timezone(timedelta(hours=9))
@@ -98,15 +98,11 @@ def main(page: ft.Page):
             # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                ranking_switch.value = priv_res.data.get("is_visible", True)
             else:
                 ranking_switch.value = True
-                
-            # 💡【最終ログイン日時更新】ログイン成功時に日本時間で日時を記録
-            # 💡（※事前に records テーブル等ではなく、独立した処理として最も手軽な「最新ゲーム記録の日付欄」に空スコア等で同期させるか、あるいは既存の records へのインサートを行います。ここでは管理画面のロジック（recordsから日付を引っ張る仕様）に合わせ、ログイン時にスコア0の内訳空で「ログイン履歴」として1件レコードを追加します）
-            supabase.table("records").insert({
-                "player": input_name, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
-            }).execute()
+
+            # 💡【バグ完全消去】ここに存在していた records への 0点データの勝手なインサート処理をすべて削除しました。
 
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
@@ -142,11 +138,8 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
-            
-            # 💡【新規登録時の日時更新】登録と同時に日本時間で記録を1件作成
-            supabase.table("records").insert({
-                "player": input_name, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
-            }).execute()
+
+            # 💡【バグ完全消去】新規登録時の勝手なインサートも綺麗に削除しました。
 
         except Exception as ex:
             show_alert(f"登録エラー: {ex}")
@@ -162,7 +155,7 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data[0].get("secret_question") or ""
+                mypage_question_input.value = res.data.get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
@@ -190,14 +183,11 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
+                        ranking_switch.value = priv_res.data.get("is_visible", True)
                     else:
                         ranking_switch.value = True
                         
-                    # 💡【自動ログイン時の日時更新】自動ログイン成功時にも日本時間で記録を同期
-                    supabase.table("records").insert({
-                        "player": saved_user, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
-                    }).execute()
+                    # 💡【バグ完全消去】自動ログイン時の勝手なインサートも綺麗に削除しました。
 
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
