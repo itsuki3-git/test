@@ -569,7 +569,7 @@ def main(page: ft.Page):
             )
         page.update()
 
-      def create_fruit_selector(label, fruit_key, count_text_component, color):
+    def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
                 controls=[
