@@ -603,7 +603,7 @@ def main(page: ft.Page):
         width=240
     )
 
-    # 💡【表形式UI】データテーブル（表）本体の定義
+       # 💡【表形式UI】データテーブル（表）本体の定義
     admin_data_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD)),
@@ -617,13 +617,22 @@ def main(page: ft.Page):
         column_spacing=15
     )
 
-    # 💡【表形式UI】はみ出しても横スクロールできるようにRowとListViewでラップ
+    # 💡【表形式UI】表の横幅をウィンドウ最大（横いっぱいに引き伸ばし）にフィットさせる設定
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
             ft.Container(content=ft.Row([admin_sort_dropdown], alignment=ft.MainAxisAlignment.END), padding=ft.padding.only(right=5, bottom=5)),
+            
+            # 💡 ListViewとRowを「expand=True / alignment=stretch」にすることで、表をウィンドウの最大幅まで引き伸ばします
             ft.ListView(
-                controls=[ft.Row([admin_data_table], scroll=ft.ScrollMode.AUTO)], 
+                controls=[
+                    ft.Row(
+                        controls=[admin_data_table], 
+                        scroll=ft.ScrollMode.AUTO,
+                        alignment=ft.MainAxisAlignment.START,
+                        vertical_alignment=ft.CrossAxisAlignment.STRETCH
+                    )
+                ], 
                 expand=True
             )
         ], expand=True
@@ -658,4 +667,3 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
