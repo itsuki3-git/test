@@ -526,7 +526,7 @@ def main(page: ft.Page):
                             ),
                             ft.Column([
                                 ft.Text(f"👤 {data['username']}", size=15, weight=ft.FontWeight.BOLD),
-                                ft.Text(f"📅 最新記録日時: {data['latest_date']}", size=12, color=ft.Colors.GREY_600),
+                                ft.Text(f"📅 最終ログイン日時: {data['latest_date']}", size=12, color=ft.Colors.GREY_600),
                                 ft.Text(f"🏆 最高得点: {data['max_score']} 点", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700),
                             ], expand=True)
                         ]),
@@ -570,8 +570,8 @@ def main(page: ft.Page):
         options=[
             ft.dropdown.Option("score_desc", "最高得点（高い順）"),
             ft.dropdown.Option("score_asc", "最高得点（低い順）"),
-            ft.dropdown.Option("date_desc", "最新記録日時（新しい順）"),
-            ft.dropdown.Option("date_asc", "最新記録日時（古い順）"),
+            ft.dropdown.Option("date_desc", "最終ログイン日時（新しい順）"),
+            ft.dropdown.Option("date_asc", "最終ログイン日時（古い順）"),
             ft.dropdown.Option("name_asc", "プレイヤー名（A-Z / 50音順）"),
             ft.dropdown.Option("name_desc", "プレイヤー名（Z-A / 逆順）"),
         ],
