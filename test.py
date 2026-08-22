@@ -14,17 +14,16 @@ def main(page: ft.Page):
 
     # =========================================================================
     # ⚠️【最重要】あなたのSupabaseの情報をここに貼り付けてください
-    # ==========================================
-    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    # =========================================================================
+    SUPABASE_URL = "https://supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     current_player = None
-    # 💡 所属しているグループのリスト（初期値はグループ1のみ）
-    my_group_list = [1]  
-    # 💡 ランキングページで現在「選択・表示中」のグループ番号
+    # 💡 複数グループ対応用の初期変数
+    my_group_list = []  
     active_ranking_group = 1  
     
     counts = {"apple": 0, "orange": 0, "grape": 0}
@@ -51,14 +50,15 @@ def main(page: ft.Page):
 
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     ranking_switch = ft.Switch(label="ランキングに名前と記録を表示する", value=True, on_change=lambda e: handle_privacy_change(e))
-    
-    # 💡【複数設定対応】ヒントテキストをカンマ区切りの案内に変更
     mypage_group_input = ft.TextField(label="所属グループ番号 (複数時はカンマ区切り)", hint_text="例: 1, 3, 5", expand=True)
 
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
     
-    # 💡【新規追加】ランキング画面で表示するグループを切り替えるドロップダウン
+    # 💡【エラー原因の完全復活】消えてしまっていたランキングのタイトルテキストパーツをここで確実に定義
+    ranking_title_text = ft.Text(value="総合ハイスコアランキング (グループ1)", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
+    
+    # 💡 ランキング画面用のグループ切り替えドロップダウン
     ranking_group_dropdown = ft.Dropdown(
         label="表示グループ切り替え",
         width=180,
@@ -79,6 +79,11 @@ def main(page: ft.Page):
 
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+    def get_jst_now_str() -> str:
+        jst = timezone(timedelta(hours=9))
+        return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
+
 
     def get_jst_now_str() -> str:
         jst = timezone(timedelta(hours=9))
