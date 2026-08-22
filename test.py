@@ -191,7 +191,6 @@ def main(page: ft.Page):
         
         # 💡【管理者限定機能】admin の場合は、データ有無に関わらずグループ0〜10を確実にロード
         if current_player == "admin":
-            # 💡 もし運用するグループを「15まで」「20まで」に増やしたい場合は、range(0, 11) の「11」を「21」などに変えてください
             for g in range(0, 11):
                 label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
                 ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
@@ -204,7 +203,7 @@ def main(page: ft.Page):
         if current_player == "admin": 
             ranking_group_dropdown.value = str(active_ranking_group)
         elif my_group_list: 
-            ranking_group_dropdown.value = str(active_ranking_group) if active_ranking_group in my_group_list else str(my_group_list)
+            ranking_group_dropdown.value = str(active_ranking_group) if active_ranking_group in my_group_list else str(my_group_list[0])
         else: 
             ranking_group_dropdown.value = "1"
         page.update()
@@ -235,7 +234,7 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                user_privacy_data = priv_res.data
+                user_privacy_data = priv_res.data[0]
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
@@ -250,22 +249,23 @@ def main(page: ft.Page):
                 for x in raw_group_str.replace("，", ",").split(","):
                     if (x_strip := x.strip()).isdigit():
                         my_group_list.append(int(x_strip))
+                # 💡【重要修正】空リストを正しく代入し、構文エラーを完全回避
                 if not my_group_list:
-                    my_group_list =
+                    my_group_list = [0] if input_name.lower() == "admin" else [1]
             else:
                 ranking_switch.value = True
                 if input_name.lower() == "admin":
-                    my_group_list =
+                    my_group_list = [0] # 💡【重要修正】不完全だった空欄に正しい初期リストを代入
                     mypage_group_input.value = "0"
                     supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
-                    my_group_list =
+                    my_group_list = [1] # 💡【重要修正】不完全だった空欄に正しい初期リストを代入
                     mypage_group_input.value = "1"
             
             if input_name.lower() == "admin":
                 active_ranking_group = 0  
             else:
-                active_ranking_group = my_group_list if my_group_list else 1
+                active_ranking_group = my_group_list[0] if my_group_list else 1
                 
             refresh_ranking_dropdown_options()
         except Exception as ex:
