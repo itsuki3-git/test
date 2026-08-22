@@ -138,80 +138,120 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column([ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700), ft.Text(value=f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700), ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True), ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
         page.update()
 
-    # --- 4. 全体のランキング描画更新（複数グループ切り替え・管理者0番対応） ---
+    # --- 1. 全体のランキング描画更新（画面を開くたびに最新データを完全フルスキャン） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-        if active_ranking_group == 0:
+        
+        # 💡 表示文言のグループ0番および通常番号対応
+        if str(active_ranking_group) == "0":
             ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者専用)"
         else:
             ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+            
         try:
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
             hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
+            
+            # 各個人のカンマ区切り文字列を分解し、現在ドロップダウンで選択中のグループに含まれているユーザーを抽出
             same_group_users = []
             for p in privacy_list:
                 user_name = p.get("username")
                 raw_g_str = str(p.get("group_number", "1"))
                 user_g_list = [int(t.strip()) for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip()).isdigit()]
-                if active_ranking_group in user_g_list: same_group_users.append(user_name)
+                
+                # 💡 active_ranking_groupを安全に整数比較
+                try:
+                    target_g = int(active_ranking_group)
+                except Exception:
+                    target_g = 1
+                    
+                if target_g in user_g_list: 
+                    same_group_users.append(user_name)
+            
             records_res = supabase.table("records").select("*").execute()
             all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
         except Exception as ex:
-            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED)); page.update(); return
+            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+            
         visible_records = [r for r in all_records if r["player"] not in hidden_users and r["player"] in same_group_users]
         if not visible_records:
             ranking_list.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
-            for index, record in enumerate(sorted(visible_records, key=lambda x: x["final_score"], reverse=True)):
+            # 各プレイヤーの「最高得点レコードのみ」を1つに集約（重複をきれいに排除）
+            user_best_records = {}
+            for r in visible_records:
+                p_name = r["player"]
+                if p_name not in user_best_records or r["final_score"] > user_best_records[p_name]["final_score"]:
+                    user_best_records[p_name] = r
+            
+            sorted_records = sorted(list(user_best_records.values()), key=lambda x: x["final_score"], reverse=True)
+            
+            for index, record in enumerate(sorted_records):
                 rank = index + 1
                 rank_color = ft.Colors.AMBER_500 if rank==1 else (ft.Colors.BLUE_GREY_300 if rank==2 else (ft.Colors.BROWN_400 if rank==3 else ft.Colors.BLUE_GREY_700))
                 rank_text = f"🥇 {rank}位" if rank==1 else (f"🥈 {rank}位" if rank==2 else (f"🥉 {rank}位" if rank==3 else f"  {rank}位"))
-                ranking_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60), ft.Column([ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)], expand=True), ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE))
+                ranking_list.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
+                                ft.Column([
+                                    ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
+                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)
+                                ], expand=True),
+                                ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
+                    )
+                )
         page.update()
 
-    def save_current_game(e):
-        if not current_player: return
-        total_score = calculate_total_score_ui_only()
-        if total_score == 0: show_alert("0点の記録は保存できません。"); return
-        try:
-            supabase.table("records").insert({"player": current_player, "final_score": total_score, "apple": counts["apple"], "orange": counts["orange"], "grape": counts["grape"], "date": get_jst_now_str()}).execute()
-        except Exception as ex: show_alert(f"記録保存失敗: {ex}"); return
-        reset_current_game(None); update_all_uis()
-        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True)); page.update()
-
-    def delete_saved_record(target_id):
-        try: supabase.table("records").delete().eq("id", target_id).execute()
-        except Exception: return
-        update_all_uis()
-
-    # --- 1. 表示グループ同期ロジック（管理者のドロップダウン全表示・確定修正版） ---
+    # --- 2. 表示グループ同期ロジック（自由設定対応 ＆ 強制再集計仕様） ---
     def refresh_ranking_dropdown_options():
+        # 現在選択されている値を一時退避
+        current_value = ranking_group_dropdown.value
         ranking_group_dropdown.options.clear()
         
-        # 💡【管理者限定機能】admin の場合は、データ有無に関わらずグループ0〜10を確実にロード
+        # 💡【管理者限定機能】admin の場合は、固定数字を使わず、全ユーザーの最新データをリアルタイム解析
         if current_player == "admin":
-            for g in range(0, 11):
-                label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
-                ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+            try:
+                all_priv = supabase.table("privacy").select("group_number").execute()
+                detected_groups = {0} # 管理者の0番をベースに用意
+                
+                if all_priv.data:
+                    for row in all_priv.data:
+                        raw_val = row.get("group_number")
+                        if raw_val:
+                            # 💡 一般プレイヤーが「自由にカンマ区切りで入力した数字」をすべて残さず抽出
+                            for token in str(raw_val).replace("，", ",").split(","):
+                                if (t := token.strip()).isdigit():
+                                    detected_groups.add(int(t))
+                
+                # 💡 ユーザーが自由に作ったグループ番号（例: 1, 3, 5, 99...）が若い順に100%自動で並びます
+                for g in sorted(list(detected_groups)):
+                    label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+            except Exception:
+                ranking_group_dropdown.options.append(ft.dropdown.Option("0", "グループ 0 (管理者専用)"))
         else:
             # 一般プレイヤーは自分が所属しているグループ群だけを表示
             for g in my_group_list: 
                 ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
         
-        # 表示グループの初期選択を安全にバインド
-        if current_player == "admin": 
-            ranking_group_dropdown.value = str(active_ranking_group)
-        elif my_group_list: 
-            ranking_group_dropdown.value = str(active_ranking_group) if active_ranking_group in my_group_list else str(my_group_list[0])
-        else: 
-            ranking_group_dropdown.value = "1"
+        # 💡 退避していた選択値を復元（なければ初期値をバインド）
+        if current_value and any(opt.key == current_value for opt in ranking_group_dropdown.options):
+            ranking_group_dropdown.value = current_value
+        else:
+            ranking_group_dropdown.value = "0" if current_player == "admin" else (str(my_group_list[0]) if my_group_list else "1")
+            
         page.update()
 
     def handle_ranking_group_switch(e):
         nonlocal active_ranking_group
-        try: active_ranking_group = int(e.control.value)
-        except Exception: active_ranking_group = 1
+        active_ranking_group = e.control.value
         update_ranking_ui()
 
     # --- 2. 既存ユーザーのログイン処理 ---
@@ -707,7 +747,18 @@ def main(page: ft.Page):
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
-    main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
+        # 💡【修正箇所】Tabsの定義に on_change を追加して、タブがクリックされるたびに最新グループをリアルタイムロード
+    main_tab_view = ft.Tabs(
+        selected_index=0, 
+        animation_duration=300, 
+        tabs=[
+            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), 
+            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), 
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
+        ], 
+        expand=True,
+        on_change=lambda e: (refresh_ranking_dropdown_options(), update_ranking_ui() if main_tab_view.selected_index == 2 else None)
+    )
 
     authenticated_view = ft.Column(
         controls=[
