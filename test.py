@@ -482,10 +482,31 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-    # 💡【管理者用機能】管理者タブの情報をリフレッシュ＆ソートして「表形式」で描画する処理
-    def update_admin_ui(e=None):
+    # 💡 現在のソート状態を記憶する変数 (初期状態：最高得点の降順)
+    # column_index -> 0: プレイヤー名, 1: 最終ログイン日時, 2: 最高得点
+    current_sort_column = 2  
+    current_sort_ascending = False  
+
+    # 💡【管理者用機能】ヘッダークリック時に呼び出されるソートトリガー関数
+    def handle_admin_table_sort(e):
+        nonlocal current_sort_column, current_sort_ascending
+        # クリックされた列番号が今と同じなら昇降を反転、違う列なら昇順(True)からスタート
+        if current_sort_column == e.column_index:
+            current_sort_ascending = not current_sort_ascending
+        else:
+            current_sort_column = e.column_index
+            current_sort_ascending = True
+        
+        # 表のヘッダーにソート矢印アイコンを表示するための状態をFletに伝える
+        admin_data_table.sort_column_index = current_sort_column
+        admin_data_table.sort_ascending = current_sort_ascending
+        
+        # データを並び替えて再描画
+        update_admin_ui()
+
+    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理
+    def update_admin_ui():
         if current_player != "admin": return
-        # 💡 表のデータ行（rows）をクリア
         admin_data_table.rows.clear()
         try:
             # データベースから全ユーザーと全ゲーム記録を取得
@@ -495,15 +516,13 @@ def main(page: ft.Page):
             all_users = users_res.data or []
             all_records = records_res.data or []
             
-            # 各ユーザーの最高得点と最終ログイン日時を計算してまとめる
+            # 各ユーザーの最高得点と最終ログイン日時をまとめて計算
             summary_data = []
             for u in all_users:
                 username = u["username"]
                 user_records = [r for r in all_records if r["player"] == username]
                 
-                # 最高得点の算出（記録がない場合は0点）
                 max_score = max([r["final_score"] for r in user_records]) if user_records else 0
-                # 最新ゲーム日時を「最終ログイン日時」として使用（ない場合は「なし」）
                 latest_date = max([r["date"] for r in user_records]) if user_records else "なし"
                 
                 summary_data.append({
@@ -512,22 +531,15 @@ def main(page: ft.Page):
                     "latest_date": latest_date
                 })
             
-            # ドロップダウンの選択値に応じてソートを実行
-            sort_val = admin_sort_dropdown.value
-            if sort_val == "name_asc":
-                summary_data.sort(key=lambda x: x["username"])
-            elif sort_val == "name_desc":
-                summary_data.sort(key=lambda x: x["username"], reverse=True)
-            elif sort_val == "date_asc":
-                summary_data.sort(key=lambda x: x["latest_date"])
-            elif sort_val == "date_desc":
-                summary_data.sort(key=lambda x: x["latest_date"], reverse=True)
-            elif sort_val == "score_asc":
-                summary_data.sort(key=lambda x: x["max_score"])
-            elif sort_val == "score_desc":
-                summary_data.sort(key=lambda x: x["max_score"], reverse=True)
+            # 💡【機能拡張】記憶された状態（列・昇降）に基づいてデータを並び替え
+            if current_sort_column == 0:    # プレイヤー名でソート
+                summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
+            elif current_sort_column == 1:  # 最終ログイン日時でソート
+                summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
+            elif current_sort_column == 2:  # 最高得点でソート
+                summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
 
-             # 💡 画面のデータテーブルに行を追加していく（セルの文字に幅を持たせて綺麗に整列）
+            # テーブルに行を追加していく
             for data in summary_data:
                 is_admin = (data["username"].lower() == "admin")
                 name_display = f"👑 {data['username']}" if is_admin else data["username"]
@@ -535,16 +547,13 @@ def main(page: ft.Page):
                 admin_data_table.rows.append(
                     ft.DataRow(
                         cells=[
-                            # 💡 各セルのft.Textに width を仕込むことで、column_widthの代わりに安全に幅を広げます
                             ft.DataCell(ft.Text(name_display, width=120, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
                             ft.DataCell(ft.Text(data["latest_date"], width=170, size=12)),
                             ft.DataCell(ft.Text(f"{data['max_score']}点", width=100, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
                         ]
                     )
                 )
-
         except Exception as ex:
-            # エラー時はテーブルの代わりにテキストを表示するため、行にエラーを載せる
             admin_data_table.rows.append(
                 ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))])
             )
@@ -576,42 +585,29 @@ def main(page: ft.Page):
 
     action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
 
-    # 💡【表形式UI】ソート選択用のドロップダウンメニュー
-    admin_sort_dropdown = ft.Dropdown(
-        label="表示の並び替え",
-        value="score_desc",
-        options=[
-            ft.dropdown.Option("score_desc", "最高得点（高い順）"),
-            ft.dropdown.Option("score_asc", "最高得点（低い順）"),
-            ft.dropdown.Option("date_desc", "最終ログイン日時（新しい順）"),
-            ft.dropdown.Option("date_asc", "最終ログイン日時（古い順）"),
-            ft.dropdown.Option("name_asc", "プレイヤー名（50音順）"),
-            ft.dropdown.Option("name_desc", "プレイヤー名（逆順）"),
-        ],
-        on_change=update_admin_ui,
-        width=240
-    )
-
-    # 💡【表形式UI】データテーブル（表）本体の定義（column_widthを削除してバグを修正）
+    # 💡【機能拡張】各ヘッダー列に on_sort=handle_admin_table_sort を追加してクリックソート可能に
     admin_data_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD)),
-            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
+            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
+            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
         ],
         rows=[],
         heading_row_color=ft.Colors.BLUE_GREY_50,
         divider_thickness=1,
         horizontal_margin=10,
         column_spacing=10,
+        # 初期ソート状態の見た目を「最高得点(インデックス2)の降順」に指定
+        sort_column_index=2,
+        sort_ascending=False,
         expand=True 
     )
 
-    # 💡【表形式UI】レイアウト構築
+    # 💡【レイアウト更新】ドロップダウンコンテナを排除し、すっきりしたデザインに
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
-            ft.Container(content=ft.Row([admin_sort_dropdown], alignment=ft.MainAxisAlignment.END), padding=ft.padding.only(right=5, bottom=5)),
+            ft.Container(height=5),
             ft.ListView(
                 controls=[admin_data_table], 
                 expand=True
@@ -648,4 +644,3 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
