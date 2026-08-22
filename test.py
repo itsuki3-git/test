@@ -630,7 +630,7 @@ def main(page: ft.Page):
         expand=True 
     )
 
-    # 💡【管理者用UI】最上部に検索ボックスを配置したレイアウト
+    # --- 各種表示構築 ---
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
@@ -643,7 +643,6 @@ def main(page: ft.Page):
         ], expand=True
     )
 
-    # --- 各種表示構築 ---
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     
     calc_tab_view = ft.Column(controls=[
@@ -657,7 +656,7 @@ def main(page: ft.Page):
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
-    # 💡 共通ヘッダー（global_header_bar）とタブメニューを縦にドッキング
+    # 💡【バグ修正】共通ヘッダーを含んだ、認証後メインビュー全体のレイアウト枠（初期状態は完全に隠す）
     authenticated_view = ft.Column(
         controls=[
             global_header_bar,
@@ -667,6 +666,10 @@ def main(page: ft.Page):
         visible=False
     )
 
+    # 💡【超重要バグ修正】
+    # これまで個別に足してしまっていた global_header_bar などの余計な記述を排除し、
+    # ログイン画面と、非表示状態のメインビューの「2つだけ」をすっきりと画面に登録します。
+    page.controls.clear()
     page.add(login_view, authenticated_view)
 
     calculate_total_score_ui_only()
