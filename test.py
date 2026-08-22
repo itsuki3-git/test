@@ -624,7 +624,7 @@ def main(page: ft.Page):
         border_radius=8
     )
 
-    # --- 各種表示構築 ---
+        # --- 各種表示構築 ---
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
@@ -635,7 +635,6 @@ def main(page: ft.Page):
 
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     
-    # 💡 各タブ内の重複していたログアウトバーを撤去し、中身だけにスッキリ整理
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
         ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
@@ -647,7 +646,7 @@ def main(page: ft.Page):
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
-    # 💡 ログイン後に表示するメイン画面（共通ヘッダー ＋ タブメニュー）をひとまとめにするColumnコンテナ
+    # 💡 共通ヘッダーとタブメニューを縦に並べるColumn（ログイン前は非表示に設定）
     authenticated_view = ft.Column(
         controls=[
             global_header_bar,
@@ -657,48 +656,25 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # 💡 画面登録時に、認証前のログイン画面と、認証後の共通ヘッダー付きメイン画面を並べて配置
+    # 画面に2つの主要なビューを登録
     page.add(login_view, authenticated_view)
-
-    # --- 認証セッション切り替え処理のラッパー更新 ---
-    # ログイン時に main_tab_view ではなく authenticated_view を表示制御するようにフックします
-    def entersession_ui_toggle(is_logged_in):
-        login_view.visible = not is_logged_in
-        authenticated_view.visible = is_logged_in
-        page.update()
-
-    # 既存の enter_game_session と handle_logout の表示切り替え部分にこれを適応させるため、
-    # 既存のロジックに影響を与えないよう、プロパティを裏側でバインドします
-    # (第2分冊内の login_view.visible と main_tab_view.visible の切り替えをフック)
-    def monitor_view_changes():
-        if main_tab_view.visible:
-            main_tab_view.visible = False
-            entersession_ui_toggle(True)
-        elif not login_view.visible and not authenticated_view.visible:
-            entersession_ui_toggle(True)
-        elif login_view.visible and authenticated_view.visible:
-            entersession_ui_toggle(False)
 
     calculate_total_score_ui_only()
     
-    def update_all_uis_with_hook():
+    # 💡 トリッキーなネストを廃止した超シンプルなUIリフレッシュ
+    def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
         if current_player == "admin":
             update_admin_ui()
-        monitor_view_changes()
-    update_all_uis = update_all_uis_with_hook
+
     update_all_uis()
 
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
 
     check_auto_login()
-    # ログアウトボタン押下時などのビュー初期化連動
-    if not login_view.visible:
-        entersession_ui_toggle(True)
-    else:
-        entersession_ui_toggle(False)
+    page.update()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
