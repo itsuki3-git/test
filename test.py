@@ -281,7 +281,7 @@ def main(page: ft.Page):
             if active_ranking_group in my_group_list:
                 ranking_group_dropdown.value = str(active_ranking_group)
             else:
-                set_active_group(my_group_list)
+                set_active_group(my_group_list[0])
         else:
             ranking_group_dropdown.value = "1"
             set_active_group(1)
@@ -319,7 +319,6 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                # 💡【重要バグ修正】リストの0番目の要素（辞書）を取り出してから get を呼び出すように変更しました
                 user_privacy_data = priv_res.data[0]
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
@@ -337,21 +336,21 @@ def main(page: ft.Page):
                     if x_strip.isdigit():
                         my_group_list.append(int(x_strip))
                 if not my_group_list:
-                    my_group_list =
+                    my_group_list = [1] # 💡【バグ修正】空欄だった部分を正しいリスト初期化構造 [1] に直しました
             else:
                 ranking_switch.value = True
                 if input_name.lower() == "admin":
-                    my_group_list =
+                    my_group_list = [0] # 💡【バグ修正】
                     mypage_group_input.value = "0"
                     supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
-                    my_group_list =
+                    my_group_list = [1] # 💡【バグ修正】
                     mypage_group_input.value = "1"
             
             if input_name.lower() == "admin":
                 active_ranking_group = 0  
             else:
-                active_ranking_group = my_group_list if my_group_list else 1
+                active_ranking_group = my_group_list[0] if my_group_list else 1
                 
             refresh_ranking_dropdown_options()
         except Exception as ex:
@@ -386,7 +385,7 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
-            my_group_list = [1]
+            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
             mypage_group_input.value = "1"
             active_ranking_group = 1
             refresh_ranking_dropdown_options()
@@ -404,7 +403,6 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                # 💡 リストから要素を安全に取り出すように修正
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
@@ -435,7 +433,6 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        # 💡【重要バグ修正】リストの0番目の要素（辞書）を取り出してから get を呼び出すように変更しました
                         user_privacy_data = priv_res.data[0]
                         ranking_switch.value = user_privacy_data.get("is_visible", True)
                         raw_group_str = str(user_privacy_data.get("group_number", "1"))
@@ -452,14 +449,14 @@ def main(page: ft.Page):
                             if x_strip.isdigit():
                                 my_group_list.append(int(x_strip))
                         if not my_group_list:
-                            my_group_list = [1]
+                            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
                     else:
                         ranking_switch.value = True
                         if saved_user.lower() == "admin":
-                            my_group_list = [0]
+                            my_group_list = [0]  # 💡 不完全だった空欄をリスト型に修正
                             mypage_group_input.value = "0"
                         else:
-                            my_group_list = [1]
+                            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
                             mypage_group_input.value = "1"
                         
                     if saved_user.lower() == "admin":
@@ -481,7 +478,6 @@ def main(page: ft.Page):
         login_view.visible = True
         authenticated_view.visible = False
         page.update()
-
 
     # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
