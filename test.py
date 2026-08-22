@@ -185,34 +185,16 @@ def main(page: ft.Page):
         except Exception: return
         update_all_uis()
 
-    # --- 1. 表示グループ同期ロジック（管理者の全グループ抽出バグを完全修正） ---
+    # --- 1. 表示グループ同期ロジック（管理者のドロップダウン全表示・確定修正版） ---
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
         
-        # 💡【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
+        # 💡【管理者限定機能】admin の場合は、データ有無に関わらずグループ0〜10を確実にロード
         if current_player == "admin":
-            try:
-                all_priv = supabase.table("privacy").select("group_number").execute()
-                detected_groups = {0} # 管理者のグループ0を初期値としてセット
-                
-                # 💡【重要バグ修正】Supabaseから返ってきたリストのレコード（辞書型）を安全にループ処理
-                if all_priv.data:
-                    for row in all_priv.data:
-                        # レコードから group_number 文字列を取得
-                        raw_val = row.get("group_number")
-                        if raw_val:
-                            # カンマで区切られた複数のグループ番号を1つずつ分解
-                            for token in str(raw_val).replace("，", ",").split(","):
-                                if (t := token.strip()).isdigit():
-                                    detected_groups.add(int(t))
-                
-                # 数字の若い順（0, 1, 2, 3...）にきれいにソートしてドロップダウンに登録
-                for g in sorted(list(detected_groups)):
-                    label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
-                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
-            except Exception:
-                # 万が一の通信エラー時は最低限グループ0だけは表示するフォールバック
-                ranking_group_dropdown.options.append(ft.dropdown.Option("0", "グループ 0 (管理者専用)"))
+            # 💡 もし運用するグループを「15まで」「20まで」に増やしたい場合は、range(0, 11) の「11」を「21」などに変えてください
+            for g in range(0, 11):
+                label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
+                ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
         else:
             # 一般プレイヤーは自分が所属しているグループ群だけを表示
             for g in my_group_list: 
@@ -222,7 +204,7 @@ def main(page: ft.Page):
         if current_player == "admin": 
             ranking_group_dropdown.value = str(active_ranking_group)
         elif my_group_list: 
-            ranking_group_dropdown.value = str(active_ranking_group) if active_ranking_group in my_group_list else str(my_group_list[0])
+            ranking_group_dropdown.value = str(active_ranking_group) if active_ranking_group in my_group_list else str(my_group_list)
         else: 
             ranking_group_dropdown.value = "1"
         page.update()
@@ -253,8 +235,7 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                # 💡 リストの0番目（辞書型データ）から安全にデータを取得
-                user_privacy_data = priv_res.data[0]
+                user_privacy_data = priv_res.data
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
@@ -270,21 +251,21 @@ def main(page: ft.Page):
                     if (x_strip := x.strip()).isdigit():
                         my_group_list.append(int(x_strip))
                 if not my_group_list:
-                    my_group_list = [0] if input_name.lower() == "admin" else [1]
+                    my_group_list =
             else:
                 ranking_switch.value = True
                 if input_name.lower() == "admin":
-                    my_group_list = [0]
+                    my_group_list =
                     mypage_group_input.value = "0"
                     supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
-                    my_group_list = [1]
+                    my_group_list =
                     mypage_group_input.value = "1"
             
             if input_name.lower() == "admin":
                 active_ranking_group = 0  
             else:
-                active_ranking_group = my_group_list[0] if my_group_list else 1
+                active_ranking_group = my_group_list if my_group_list else 1
                 
             refresh_ranking_dropdown_options()
         except Exception as ex:
