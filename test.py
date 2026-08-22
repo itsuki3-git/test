@@ -96,6 +96,32 @@ def main(page: ft.Page):
             return
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
+    # --- 既存ユーザーのログイン ---
+    def handle_existing_login(e):
+        nonlocal current_player
+        input_name = login_name_input.value.strip()
+        input_pass = login_pass_input.value.strip()
+        if not input_name or not input_pass:
+            show_alert("プレイヤー名とパスワードを入力してください。")
+            return
+        try:
+            hashed_pass = hash_password(input_pass)
+            res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
+
+            if not res.data:
+                show_alert("名前またはパスワードが間違っています。")
+                return
+
+            page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
+            page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
+
+            priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
+            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
+        except Exception as ex:
+            show_alert(f"ログインエラー: {ex}")
+            return
+        enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
+
     # --- 新規プレイヤーの登録 ---
     def handle_new_register(e):
         nonlocal current_player
@@ -104,6 +130,12 @@ def main(page: ft.Page):
         if not input_name or not input_pass:
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
+        
+        # 💡【重要】一般ユーザーによる 'admin' 名義での登録を完全にブロック
+        if input_name.lower() == "admin":
+            show_alert("「admin」という名前は管理者専用のため登録できません。")
+            return
+            
         if len(input_pass) < 4:
             show_alert("パスワードは4桁以上で入力してください。")
             return
@@ -134,13 +166,19 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data:
-                mypage_question_input.value = res.data[0].get("secret_question") or ""
-                # 💡セキュリティのため、暗号化された答えは画面（マイページ）にロードせず、入力欄は空にします
+                mypage_question_input.value = res.data.get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
         login_view.visible = False
         main_tab_view.visible = True
+        
+        # 💡【管理者対応】ログインしたのが admin の場合のみ「管理者ページ」タブを出現させる
+        if current_player == "admin" and len(main_tab_view.tabs) == 3:
+            main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
+        elif current_player != "admin" and len(main_tab_view.tabs) == 4:
+            main_tab_view.tabs.pop() # 一般ユーザーなら管理者タブを消去
+            
         reset_current_game(None)
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
@@ -440,6 +478,72 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
+    # 💡【管理者用機能】管理者タブの情報をリフレッシュする処理
+    def update_admin_ui():
+        if current_player != "admin": return
+        admin_users_list.controls.clear()
+        try:
+            # 全ユーザーと全記録を取得
+            users_res = supabase.table("users").select("username").execute()
+            records_res = supabase.table("records").select("*").execute()
+            
+            all_users = users_res.data or []
+            all_records = records_res.data or []
+            
+            # 1. 登録プレイヤー一覧の描画
+            admin_users_list.controls.append(ft.Text(f"👥 登録プレイヤー数: {len(all_users)}人", weight=ft.FontWeight.BOLD, size=14))
+            for u in all_users:
+                # admin自身は削除できないようにガード
+                is_admin_user = (u["username"].lower() == "admin")
+                admin_users_list.controls.append(
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.PERSON if not is_admin_user else ft.Icons.SUPERVISED_USER_CIRCLE),
+                        title=ft.Text(u["username"]),
+                        trailing=None if is_admin_user else ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINED,
+                            icon_color=ft.Colors.RED_600,
+                            tooltip="プレイヤーを強制削除",
+                            on_click=lambda e, name=u["username"]: delete_user_by_admin(name)
+                        )
+                    )
+                )
+            
+            # 2. 全プレイヤーのゲーム結果ログの描画
+            admin_records_list.controls.clear()
+            admin_records_list.controls.append(ft.Text(f"📊 全ゲーム記録数: {len(all_records)}件", weight=ft.FontWeight.BOLD, size=14))
+            for r in sorted(all_records, key=lambda x: x["id"], reverse=True):
+                admin_records_list.controls.append(
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Column([
+                                ft.Text(f"プレイヤー: {r['player']}", size=14, weight=ft.FontWeight.W_500),
+                                ft.Text(f"得点: {r['final_score']} 点 (🍎{r['apple']} 🍊{r['orange']} 🍇{r['grape']})", size=12, color=ft.Colors.GREY_700),
+                                ft.Text(f"日時: {r['date']}", size=10, color=ft.Colors.GREY_500)
+                            ], expand=True),
+                            ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, idx=r["id"]: delete_record_by_admin(idx))
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        padding=8, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=6, bgcolor=ft.Colors.GREY_50
+                    )
+                )
+        except Exception as ex:
+            admin_users_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
+        page.update()
+
+    # 💡【管理者用機能】指定したユーザーを強制削除
+    def delete_user_by_admin(username):
+        try:
+            supabase.table("users").delete().eq("username", username).execute()
+            update_all_uis()
+        except Exception:
+            pass
+
+    # 💡【管理者用機能】指定したゲーム記録を強制削除
+    def delete_record_by_admin(target_id):
+        try:
+            supabase.table("records").delete().eq("id", target_id).execute()
+            update_all_uis()
+        except Exception:
+            pass
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
@@ -466,6 +570,20 @@ def main(page: ft.Page):
 
     action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
 
+    # 💡【管理者対応】管理者専用タブ内のリスト表示コンポーネント
+    admin_users_list = ft.ListView(spacing=5, padding=5, height=200)
+    admin_records_list = ft.ListView(spacing=10, padding=5, expand=True)
+
+    # 💡【管理者対応】管理者タブのレイアウト構築
+    admin_tab_view = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
+            ft.Container(content=admin_users_list, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=8, padding=5, bgcolor=ft.Colors.WHITE),
+            ft.Divider(height=15),
+            ft.Container(content=admin_records_list, expand=True)
+        ], expand=True, scroll=ft.ScrollMode.AUTO
+    )
+
     # --- 各種表示構築 ---
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     calc_tab_view = ft.Column(controls=[ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8), ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10), ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True), ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)], expand=True)
@@ -474,10 +592,18 @@ def main(page: ft.Page):
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True, visible=False)
 
-    # 💡【バグ修正】UIを登録した後に各種初期化を行う
+    # UIコンポーネントを画面に追加
     page.add(login_view, main_tab_view)
 
     calculate_total_score_ui_only()
+    
+    # 💡【管理者対応】UIリフレッシュに管理画面の更新を統合
+    def update_all_uis_with_admin():
+        update_my_records_ui()
+        update_ranking_ui()
+        if current_player == "admin":
+            update_admin_ui()
+    update_all_uis = update_all_uis_with_admin
     update_all_uis()
 
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
