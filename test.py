@@ -251,7 +251,7 @@ def main(page: ft.Page):
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
         
-        # 💡【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
+        # 【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
         if current_player == "admin":
             try:
                 all_priv = supabase.table("privacy").select("group_number").execute()
@@ -319,10 +319,12 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data.get("is_visible", True)
-                raw_group_str = str(priv_res.data.get("group_number", "1"))
+                # 💡【重要バグ修正】リストの0番目の要素（辞書）を取り出してから get を呼び出すように変更しました
+                user_privacy_data = priv_res.data[0]
+                ranking_switch.value = user_privacy_data.get("is_visible", True)
+                raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
-                # 💡 adminの場合は強制的にグループ0に固定・同期
+                # adminの場合は強制的にグループ0に固定・同期
                 if input_name.lower() == "admin":
                     raw_group_str = "0"
                     supabase.table("privacy").update({"group_number": "0"}).eq("username", "admin").execute()
@@ -335,21 +337,21 @@ def main(page: ft.Page):
                     if x_strip.isdigit():
                         my_group_list.append(int(x_strip))
                 if not my_group_list:
-                    my_group_list = [1]
+                    my_group_list =
             else:
                 ranking_switch.value = True
                 if input_name.lower() == "admin":
-                    my_group_list = [0]
+                    my_group_list =
                     mypage_group_input.value = "0"
                     supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
-                    my_group_list = [1]
+                    my_group_list =
                     mypage_group_input.value = "1"
             
             if input_name.lower() == "admin":
-                active_ranking_group = 0  # 管理者の初期値はグループ0
+                active_ranking_group = 0  
             else:
-                active_ranking_group = my_group_list[0] if my_group_list else 1
+                active_ranking_group = my_group_list if my_group_list else 1
                 
             refresh_ranking_dropdown_options()
         except Exception as ex:
@@ -402,7 +404,8 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data.get("secret_question") or ""
+                # 💡 リストから要素を安全に取り出すように修正
+                mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
@@ -432,8 +435,10 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data.get("is_visible", True)
-                        raw_group_str = str(priv_res.data.get("group_number", "1"))
+                        # 💡【重要バグ修正】リストの0番目の要素（辞書）を取り出してから get を呼び出すように変更しました
+                        user_privacy_data = priv_res.data[0]
+                        ranking_switch.value = user_privacy_data.get("is_visible", True)
+                        raw_group_str = str(user_privacy_data.get("group_number", "1"))
                         
                         if saved_user.lower() == "admin":
                             raw_group_str = "0"
@@ -476,6 +481,7 @@ def main(page: ft.Page):
         login_view.visible = True
         authenticated_view.visible = False
         page.update()
+
 
     # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
