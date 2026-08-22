@@ -234,12 +234,16 @@ def main(page: ft.Page):
             return
         try:
             res = supabase.table("users").select("secret_question").eq("username", name).execute()
+            # データのリストが空でないか（ユーザーが存在するか）を先に確認
             if not res.data:
-                forgot_question_text.value = "❌ そのプレイヤー名は登録されていません。"
-            elif not res.data.get("secret_question"):
-                forgot_question_text.value = "⚠️ 秘密の質問が設定されていません。"
+                forgot_question_text. value = "❌ そのプレイヤー名は登録されていません。"
             else:
-                forgot_question_text.value = f"❓ 質問: {res.data['secret_question']}"
+                # リストの先頭要素 [0]（該当ユーザーの辞書データ）を取り出してから .get() を使う
+                user_data = res.data[0]
+                if not user_data.get("secret_question"):
+                    forgot_question_text. value = "⚠ 秘密の質問が設定されていません。"
+                else:
+                    forgot_question_text. value = f"❓ 質問: { user_data['secret_question']}"
         except Exception as ex:
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
