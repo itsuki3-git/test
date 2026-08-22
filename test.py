@@ -251,7 +251,7 @@ def main(page: ft.Page):
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
         
-        # 【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
+        # 💡【管理者限定機能】admin の場合は、システムに登録されている全グループを網羅してリストアップ
         if current_player == "admin":
             try:
                 all_priv = supabase.table("privacy").select("group_number").execute()
@@ -319,7 +319,7 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                user_privacy_data = priv_res.data[0]
+                user_privacy_data = priv_res.data[0] # 💡リストの先頭辞書を取り出す仕様に修正
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
@@ -335,16 +335,17 @@ def main(page: ft.Page):
                     x_strip = x.strip()
                     if x_strip.isdigit():
                         my_group_list.append(int(x_strip))
+                # 💡【重要バグ修正】空欄だったデフォルト所属グループを確実に[1]または[0]で初期化
                 if not my_group_list:
-                    my_group_list = [1] # 💡【バグ修正】空欄だった部分を正しいリスト初期化構造 [1] に直しました
+                    my_group_list = [0] if input_name.lower() == "admin" else [1]
             else:
                 ranking_switch.value = True
                 if input_name.lower() == "admin":
-                    my_group_list = [0] # 💡【バグ修正】
+                    my_group_list = [0] # 💡【重要バグ修正】
                     mypage_group_input.value = "0"
                     supabase.table("privacy").insert({"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
-                    my_group_list = [1] # 💡【バグ修正】
+                    my_group_list = [1] # 💡【重要バグ修正】
                     mypage_group_input.value = "1"
             
             if input_name.lower() == "admin":
@@ -385,7 +386,8 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
-            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
+            # 💡【フリーズ修正】新規登録プレイヤーのデフォルト所属を「グループ 1」に確定
+            my_group_list = [1]
             mypage_group_input.value = "1"
             active_ranking_group = 1
             refresh_ranking_dropdown_options()
@@ -448,15 +450,16 @@ def main(page: ft.Page):
                             x_strip = x.strip()
                             if x_strip.isdigit():
                                 my_group_list.append(int(x_strip))
+                        # 💡【フリーズ修正】自動ログイン時のフォールバックを確定
                         if not my_group_list:
-                            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
+                            my_group_list = [0] if saved_user.lower() == "admin" else [1]
                     else:
                         ranking_switch.value = True
                         if saved_user.lower() == "admin":
-                            my_group_list = [0]  # 💡 不完全だった空欄をリスト型に修正
+                            my_group_list = [0]
                             mypage_group_input.value = "0"
                         else:
-                            my_group_list = [1]  # 💡 不完全だった空欄をリスト型に修正
+                            my_group_list = [1]
                             mypage_group_input.value = "1"
                         
                     if saved_user.lower() == "admin":
@@ -478,6 +481,7 @@ def main(page: ft.Page):
         login_view.visible = True
         authenticated_view.visible = False
         page.update()
+
 
     # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
