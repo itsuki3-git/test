@@ -728,12 +728,13 @@ def main(page: ft.Page):
                 ft.Container(height=3),
                 ft.Row(
                     controls=[
-                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: (setattr(change_name_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
-                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: (setattr(change_group_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
-                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: (setattr(change_pass_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
-                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: (setattr(secret_question_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
-                        ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: (setattr(privacy_setting_dialog, "open", True), page.update()), icon_color=ft.Colors.WHITE, icon_size=26),
-                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: (setattr(confirm_delete_dialog, "open", True), page.update()), icon_color=ft.Colors.RED_300, icon_size=26)
+                        # 💡【最新仕様に修正】page.open() を使うことで、Flet 0.28.3 以降でも100%確実にポップアップが起動します
+                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300, icon_size=26)
                     ],
                     wrap=True,  
                     spacing=8,
@@ -745,11 +746,11 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【多重バインド修正】ranking_title_text を Container で包まず、直接Rowコントロールに配置
+    # スマホ幅でもタイトルとドロップダウンが綺麗に自動で2段に折り返すレスポンシブRow配置
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
             content=ft.Row([
-                ranking_title_text, # 💡直接指定することでメモリ競合を完全排除
+                ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
                 ranking_group_dropdown
             ],
             wrap=True,                     
@@ -762,7 +763,6 @@ def main(page: ft.Page):
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
-        # 💡【修正箇所】Tabsの定義に on_change を追加して、タブがクリックされるたびに最新グループをリアルタイムロード
     main_tab_view = ft.Tabs(
         selected_index=0, 
         animation_duration=300, 
@@ -784,13 +784,11 @@ def main(page: ft.Page):
         visible=False
     )
 
-       # (プログラムの最下部付近)
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
     calculate_total_score_ui_only()
     update_all_uis()
-    refresh_ranking_dropdown_options()  # 💡【追記】起動時にドロップダウンを強制同期させる
 
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
