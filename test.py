@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-    # --- 既存ユーザーのログイン ---
+       # --- 既存ユーザーのログイン ---
     def handle_existing_login(e):
         nonlocal current_player
         input_name = login_name_input.value.strip()
@@ -90,7 +90,7 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
 
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+            ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -132,10 +132,11 @@ def main(page: ft.Page):
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
         try:
-            res = supabase.table("users").select("secret_question, secret_answer").eq("username", current_player).execute()
+            res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data:
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
-                mypage_answer_input.value = res.data[0].get("secret_answer") or ""
+                # 💡セキュリティのため、暗号化された答えは画面（マイページ）にロードせず、入力欄は空にします
+                mypage_answer_input.value = ""
         except Exception:
             pass
         login_view.visible = False
@@ -155,7 +156,7 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    ranking_switch.value = priv_res.data[0]["is_visible"] if priv_res.data else True
+                    ranking_switch.value = priv_res.data["is_visible"] if priv_res.data else True
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
@@ -187,7 +188,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
 
-    # --- マイページでの秘密の質問と答えの保存処理 ---
+    # --- マイページでの秘密の質問と答えの保存処理（修正版） ---
     def handle_save_secret_question(e):
         q = mypage_question_input.value.strip()
         a = mypage_answer_input.value.strip()
@@ -195,7 +196,10 @@ def main(page: ft.Page):
             show_alert("質問と答えの両方を入力してください。")
             return
         try:
-            supabase.table("users").update({"secret_question": q, "secret_answer": a}).eq("username", current_player).execute()
+            # 💡【セキュリティ強化】秘密の質問の「答え」をハッシュ化して保存
+            hashed_answer = hash_password(a)
+            supabase.table("users").update({"secret_question": q, "secret_answer": hashed_answer}).eq("username", current_player).execute()
+            mypage_answer_input.value = ""  # 入力欄をクリア
             page.close(secret_question_dialog)
             show_alert("秘密の質問と答えを保存しました！", title="成功")
         except Exception as ex:
@@ -212,7 +216,7 @@ def main(page: ft.Page):
             if not res.data:
                 forgot_question_text.value = "❌ そのプレイヤー名は登録されていません。"
             else:
-                user_data = res.data[0]
+                user_data = res.data
                 if not user_data.get("secret_question"):
                     forgot_question_text.value = "⚠ 秘密の質問が設定されていません。"
                 else:
@@ -221,7 +225,7 @@ def main(page: ft.Page):
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # --- パスワードリセット実行（バグ修正版） ---
+    # --- パスワードリセット実行（修正版） ---
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -234,7 +238,8 @@ def main(page: ft.Page):
             return
         try:
             res = supabase.table("users").select("secret_answer").eq("username", name).execute()
-            if not res.data or res.data[0].get("secret_answer") != ans:
+            # 💡【セキュリティ強化】入力された答えをハッシュ化し、DB内のハッシュ値と比較
+            if not res.data or res.data.get("secret_answer") != hash_password(ans):
                 show_alert("質問の答えが間違っています。")
                 return
 
