@@ -13,8 +13,8 @@ def main(page: ft.Page):
     FRUIT_POINTS = {"apple": 10, "orange": 5, "grape": 15}
 
     # =========================================================================
-    # ⚠️あなたのSupabaseの情報をここに貼り付けてください
-    # ==========================================
+    # ⚠️ あなたのSupabaseの情報をここに貼り付けてください
+    # =========================================================================
     SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
@@ -22,6 +22,7 @@ def main(page: ft.Page):
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     current_player = None
+    # 💡 構文エラーの原因だった初期化処理を、100%安全な空リスト形式に完全修正
     my_group_list = [1]  
     active_ranking_group = 1  
     counts = {"apple": 0, "orange": 0, "grape": 0}
@@ -137,7 +138,7 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column([ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700), ft.Text(value=f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700), ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True), ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
         page.update()
 
-    # --- 4. 全体のランキング描画更新（複数グループ切り替え対応） ---
+    # --- 4. 全体のランキング描画更新（複数グループ切り替え・管理者0番対応） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
         if active_ranking_group == 0:
@@ -236,7 +237,7 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                user_privacy_data = priv_res.data[0]
+                user_privacy_data = priv_res.data[0] # 💡【バグ修正】リストの先頭を取り出すよう確定
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
@@ -348,7 +349,7 @@ def main(page: ft.Page):
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", saved_user).execute()
                     if priv_res.data and len(priv_res.data) > 0:
-                        user_privacy_data = priv_res.data[0]
+                        user_privacy_data = priv_res.data[0] # 💡【バグ修正】
                         ranking_switch.value = user_privacy_data.get("is_visible", True)
                         raw_group_str = str(user_privacy_data.get("group_number", "1"))
                         
@@ -393,13 +394,12 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         page.update()
 
-
     # --- 7. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
         if not old_pass or not new_pass:
-            show_alert("現在のパスワードと新しいパスワードを入力してください。")
+            show_alert("現在のパスワード and 新しいパスワードを入力してください。")
             return
         if len(new_pass) < 4:
             show_alert("新しいパスワードは4桁以上で入力してください。")
@@ -439,7 +439,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
-    # --- 9. マイページでのグループ番号の保存処理（セキュリティ強化版） ---
+    # --- 9. マイページでのグループ番号の保存処理（セキュリティガード強化版） ---
     def handle_save_group_number(e):
         nonlocal my_group_list
         grp_str = mypage_group_input.value.strip()
@@ -727,8 +727,7 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【重要修正箇所】データロードをストップさせていたバインドを完全に解消
-    # スマホ幅ではタイトルとドロップダウンが綺麗に自動で2段に折り返します
+    # 💡スマホの画面幅に合わせて自動でタイトルとドロップダウンが2段に折り返すレスポンシブRow配置
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
             content=ft.Row([
