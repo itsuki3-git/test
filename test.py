@@ -70,7 +70,7 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-    # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
+       # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
     def get_jst_now_str() -> str:
         from datetime import timezone, timedelta
         jst = timezone(timedelta(hours=9))
@@ -97,12 +97,11 @@ def main(page: ft.Page):
 
             # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
+            # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
             if priv_res.data and len(priv_res.data) > 0:
-                ranking_switch.value = priv_res.data.get("is_visible", True)
+                ranking_switch.value = priv_res.data[0].get("is_visible", True)
             else:
                 ranking_switch.value = True
-
-            # 💡【バグ完全消去】ここに存在していた records への 0点データの勝手なインサート処理をすべて削除しました。
 
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
@@ -139,8 +138,6 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
 
-            # 💡【バグ完全消去】新規登録時の勝手なインサートも綺麗に削除しました。
-
         except Exception as ex:
             show_alert(f"登録エラー: {ex}")
             return
@@ -154,8 +151,9 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
+            # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data.get("secret_question") or ""
+                mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
@@ -182,12 +180,11 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
+                    # 💡【重要バグ修正】リストの0番目の要素(辞書)から安全に get() を使う
                     if priv_res.data and len(priv_res.data) > 0:
-                        ranking_switch.value = priv_res.data.get("is_visible", True)
+                        ranking_switch.value = priv_res.data[0].get("is_visible", True)
                     else:
                         ranking_switch.value = True
-                        
-                    # 💡【バグ完全消去】自動ログイン時の勝手なインサートも綺麗に削除しました。
 
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
