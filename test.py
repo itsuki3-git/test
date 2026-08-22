@@ -260,7 +260,7 @@ def main(page: ft.Page):
         page.update()
 
     
-    # --- マイページでのパスワード変更処理 ---
+    # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
@@ -288,7 +288,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
 
-    # --- マイページでの秘密の質問と答えの保存処理 ---
+    # --- 2. マイページでの秘密の質問と答えの保存処理 ---
     def handle_save_secret_question(e):
         q = mypage_question_input.value.strip()
         a = mypage_answer_input.value.strip()
@@ -305,15 +305,14 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
-    # 💡【複数設定対応】カンマ区切りの文字列をテキストとしてSupabaseに安全に保存
+    # --- 3. マイページでのグループ番号の保存処理 ---
     def handle_save_group_number(e):
-        nonlocal current_group, my_group_list
+        nonlocal my_group_list  # 💡 エラーの原因だった「current_group」を完全に除去しました
         grp_str = mypage_group_input.value.strip()
         if not grp_str:
             show_alert("グループ番号を入力してください。")
             return
             
-        # カンマ区切りの妥当性チェック
         parsed_list = []
         for x in grp_str.replace("，", ",").split(","):
             x_strip = x.strip()
@@ -328,14 +327,12 @@ def main(page: ft.Page):
             return
             
         try:
-            # 💡 カンマで結合し直したクリーンな文字列をテキストとして保存
             clean_str = ", ".join([str(n) for n in parsed_list])
             supabase.table("privacy").update({"group_number": clean_str}).eq("username", current_player).execute()
             
             my_group_list = parsed_list
             mypage_group_input.value = clean_str
             
-            # ランキング画面のドロップダウンの選択肢を再同期
             refresh_ranking_dropdown_options()
             
             change_group_dialog.open = False
@@ -345,7 +342,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
 
-    # --- パスワードを忘れた場合：ユーザー名から質問を引っ張る処理 ---
+    # --- 4. パスワードを忘れた場合：ユーザー名から質問を引っ張る処理 ---
     def handle_forgot_check_user(e):
         name = forgot_name_input.value.strip()
         if not name:
@@ -369,7 +366,7 @@ def main(page: ft.Page):
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # --- パスワードリセット実行 ---
+    # --- 5. パスワードリセット実行 ---
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -405,7 +402,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"リセット失敗: {ex}")
 
-    # --- 名前の変更処理 ---
+    # --- 6. 名前の変更処理 ---
     def handle_rename(e):
         nonlocal current_player
         new_name = edit_name_input.value.strip()
@@ -427,7 +424,7 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
-    # --- 非表示設定 ---
+    # --- 7. 非表示設定 ---
     def handle_privacy_change(e):
         if not current_player: return
         try:
@@ -436,7 +433,7 @@ def main(page: ft.Page):
             pass
         update_ranking_ui()
 
-    # --- アカウント完全削除 ---
+    # --- 8. アカウント完全削除 ---
     def execute_delete_account():
         nonlocal current_player
         if not current_player: return
@@ -451,28 +448,6 @@ def main(page: ft.Page):
         login_view.visible = True
         authenticated_view.visible = False
         update_all_uis()
-
-    # --- スコア計算 ---
-    def calculate_total_score_ui_only():
-        total = (counts["apple"] * FRUIT_POINTS["apple"] + counts["orange"] * FRUIT_POINTS["orange"] + counts["grape"] * FRUIT_POINTS["grape"])
-        score_display.value = str(total)
-        return total
-
-    def adjust_count(fruit, delta):
-        new_count = counts[fruit] + delta
-        if new_count >= 0:
-            counts[fruit] = new_count
-            if fruit == "apple": apple_count_text.value = str(new_count)
-            elif fruit == "orange": orange_count_text.value = str(new_count)
-            elif fruit == "grape": grape_count_text.value = str(new_count)
-            calculate_total_score_ui_only()
-            page.update()
-
-    def update_all_uis():
-        update_my_records_ui()
-        update_ranking_ui()
-        if current_player == "admin":
-            update_admin_ui()
 
     # --- マイページ（自分だけの記録）の描画更新 ---
     def update_my_records_ui():
