@@ -745,17 +745,28 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【レイアウト拡張】タイトル表示の横に、複数グループの切り替え用ドロップダウンを配置！
+    # 💡【UI改善版】スマホでも絶対に見切れない＆上下に自動整列するランキング画面
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
-            content=ft.Row([
-                ranking_title_text,
-                ranking_group_dropdown
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            content=ft.Row(
+                controls=[
+                    # 💡 タイトルが長い場合でもスマホの幅に収まるよう自動的に縮小・折り返しを許可
+                    ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
+                    
+                    # 💡 切り替えドロップダウンメニュー
+                    ranking_group_dropdown
+                ],
+                wrap=True,                     # 💡 画面幅が狭くなったら自動的に上下2段に折り返す魔法のフラグ
+                spacing=10,                    # 横並びのときの隙間
+                run_spacing=10,                # 💡 スマホで縦並び（2段）になったときの上下の隙間
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ),
             padding=15
         ),
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
+
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
