@@ -688,21 +688,22 @@ def main(page: ft.Page):
         ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
     
-        # 💡【UI改善版】スマホでも絶対に見切れない＆文字がくっきり見えるマイページ画面
+    # 💡【エラー完全消滅・見切れ対策版】環境を選ばず100%確実に動くマイページレイアウト
     mypage_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
         ft.Container(content=my_records_list, expand=True), 
         ft.Container(height=5),
         
-        # 💡 下部の設定エリアの見た目・色合いを劇的に改善
+        # 下部の設定エリアの見た目・色合いを劇的に改善
         ft.Container(
             content=ft.Column([
-                # 💡 文字を「白の太字」に変更して、背景に沈まずハッキリ見えるように変更
+                # 文字を「白の太字」に変更して、背景に沈まずハッキリ見えるように変更
                 ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Container(height=3),
                 
-                # 💡 ft.Row から ft.Wrap に変更！スマホの画面幅に合わせてアイコンが自動で折り返します
-                ft.Wrap(
+                # 💡【重要バグ修正】ft.Wrap を廃止し、どのFletバージョンでも確実に動く ft.Row(wrap=True) に変更！
+                # これによりスマホの画面幅に合わせてアイコンが自動で綺麗に折り返します
+                ft.Row(
                     controls=[
                         ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
@@ -711,18 +712,18 @@ def main(page: ft.Page):
                         ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300, icon_size=26)
                     ],
-                    spacing=8,        # ボタン同士の横の隙間
-                    run_spacing=5,    # 折り返したときの上下の隙間
+                    wrap=True,  # 💡 画面幅に合わせてはみ出さずに自動折り返しを行うフラグ
+                    spacing=8,
+                    run_spacing=5,
                     alignment=ft.MainAxisAlignment.START
                 )
             ]), 
             padding=12, 
-            bgcolor=ft.Colors.BLUE_GREY_600,  # 💡 背景を濃いブルーグレーにして高級感と視認性をアップ
+            bgcolor=ft.Colors.BLUE_GREY_600,  # 背景を濃いブルーグレーにして高級感と視認性をアップ
             border_radius=10, 
             border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
-
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
