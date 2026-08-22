@@ -243,7 +243,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
-    # --- パスワードを忘れた場合：ユーザー名から質問を引っ張る処理 ---
+    # --- パスワードを忘れた場合：ユーザー名から質問を引っ張る処理（修正版） ---
     def handle_forgot_check_user(e):
         name = forgot_name_input.value.strip()
         if not name:
@@ -251,10 +251,13 @@ def main(page: ft.Page):
             return
         try:
             res = supabase.table("users").select("secret_question").eq("username", name).execute()
+            
+            # 💡【重要バグ修正】res.data が空（ユーザーがいない）か、リストになっているかを正しくチェック
             if not res.data:
                 forgot_question_text.value = "❌ そのプレイヤー名は登録されていません。"
             else:
-                user_data = res.data
+                # リストの先頭要素 [0] から安全にデータを取得
+                user_data = res.data[0]
                 if not user_data.get("secret_question"):
                     forgot_question_text.value = "⚠ 秘密の質問が設定されていません。"
                 else:
@@ -262,6 +265,7 @@ def main(page: ft.Page):
         except Exception as ex:
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
+
 
     # --- パスワードリセット実行（修正版） ---
     def handle_forgot_reset_password(e):
