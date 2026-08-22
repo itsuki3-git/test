@@ -536,24 +536,90 @@ def main(page: ft.Page):
             supabase.table("records").delete().eq("id", target_id).execute()
         except Exception:
             return
-        update_all_uis()
 
-    # 💡【重要バグ修正】呼び出されるより前に、まず一番上で関数を定義します
-    def create_fruit_selector(label, fruit_key, count_text_component, color):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True),
-                    ft.Row(
-                        controls=[
-                            ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)),
-                            count_text_component,
-                            ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))
-                        ], spacing=5
+    # 💡【順序バグ対策】まず一番上でソート用の変数と関数を完全に定義します
+    current_sort_column = 3  
+    current_sort_ascending = False  
+
+    # 💡【管理者用機能】ヘッダーの列名クリック時に呼び出されるソートトリガー関数
+    def handle_admin_table_sort(e):
+        nonlocal current_sort_column, current_sort_ascending
+        if current_sort_column == e.column_index:
+            current_sort_ascending = not current_sort_ascending
+        else:
+            current_sort_column = e.column_index
+            current_sort_ascending = True
+        
+        admin_data_table.sort_column_index = current_sort_column
+        admin_data_table.sort_ascending = current_sort_ascending
+        update_admin_ui()
+
+    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理
+    def update_admin_ui():
+        if current_player != "admin": return
+        admin_data_table.rows.clear()
+        try:
+            users_res = supabase.table("users").select("username").execute()
+            privacy_res = supabase.table("privacy").select("username", "group_number").execute()
+            records_res = supabase.table("records").select("*").execute()
+            
+            all_users = users_res.data or []
+            all_privacy = privacy_res.data or []
+            all_records = records_res.data or []
+            
+            group_map = {p["username"]: p.get("group_number", 1) for p in all_privacy}
+            
+            summary_data = []
+            for u in all_users:
+                username = u["username"]
+                
+                search_keyword = admin_search_input.value.strip().lower() if 'admin_search_input' in locals() else ""
+                if search_keyword and search_keyword not in username.lower():
+                    continue
+                    
+                user_records = [r for r in all_records if r["player"] == username]
+                
+                valid_scores = [r["final_score"] for r in user_records if r.get("final_score", 0) > 0]
+                max_score = max(valid_scores) if valid_scores else 0
+                latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
+                
+                user_group = group_map.get(username, 1)
+                
+                summary_data.append({
+                    "username": username,
+                    "group": user_group,
+                    "max_score": max_score,
+                    "latest_date": latest_date
+                })
+            
+            if current_sort_column == 0:
+                summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
+            elif current_sort_column == 1:
+                summary_data.sort(key=lambda x: x["group"], reverse=not current_sort_ascending)
+            elif current_sort_column == 2:
+                summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
+            elif current_sort_column == 3:
+                summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
+
+            for data in summary_data:
+                is_admin = (data["username"].lower() == "admin")
+                name_display = f"👑 {data['username']}" if is_admin else data["username"]
+                
+                admin_data_table.rows.append(
+                    ft.DataRow(
+                        cells=[
+                            ft.DataCell(ft.Text(name_display, width=100, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
+                            ft.DataCell(ft.Text(f"グループ {data['group']}", width=80)),
+                            ft.DataCell(ft.Text(data["latest_date"], width=150, size=12)),
+                            ft.DataCell(ft.Text(f"{data['max_score']}点", width=80, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
+                        ]
                     )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
-        )
+                )
+        except Exception as ex:
+            admin_data_table.rows.append(
+                ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))])
+            )
+        page.update()
 
     # --- 各種ダイアログ設定 ---
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
@@ -593,7 +659,7 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # 管理者用データテーブルの定義
+    # 💡 1本目で定義した handle_admin_table_sort をここで安全にバインドします！
     admin_data_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
@@ -623,7 +689,7 @@ def main(page: ft.Page):
 
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
     
-    # 💡 関数が定義されたあとなので、ここで安全にcreate_fruit_selectorを呼び出せます！
+    # 💡 上方で定義された create_fruit_selector を安全に呼び出します
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
         ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
@@ -653,7 +719,7 @@ def main(page: ft.Page):
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
-    # 共通ヘッダーとタブメニューの組み立て
+    # 共通ヘッダーとタブメニューを縦にドッキング
     authenticated_view = ft.Column(
         controls=[
             global_header_bar,
@@ -676,8 +742,5 @@ def main(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
