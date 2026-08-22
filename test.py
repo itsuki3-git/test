@@ -413,12 +413,12 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         page.update()
 
-    # --- 7. マイページでのパスワード変更処理 ---
+    # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
         new_pass = mypage_new_pass.value.strip()
         if not old_pass or not new_pass:
-            show_alert("現在のパスワード and 新しいパスワードを入力してください。")
+            show_alert("現在のパスワードと新しいパスワードを入力してください。")
             return
         if len(new_pass) < 4:
             show_alert("新しいパスワードは4桁以上で入力してください。")
@@ -441,7 +441,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
 
-    # --- 8. マイページでの秘密の質問と答えの保存処理 ---
+    # --- 2. マイページでの秘密の質問と答えの保存処理 ---
     def handle_save_secret_question(e):
         q = mypage_question_input.value.strip()
         a = mypage_answer_input.value.strip()
@@ -458,7 +458,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
-    # --- 9. マイページでのグループ番号の保存処理（セキュリティガード強化版） ---
+    # --- 3. マイページでのグループ番号の保存処理（セキュリティガード強化版） ---
     def handle_save_group_number(e):
         nonlocal my_group_list
         grp_str = mypage_group_input.value.strip()
@@ -498,8 +498,7 @@ def main(page: ft.Page):
             show_alert(f"所属グループを「{clean_str}」に変更しました！", title="成功")
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
-
-    # --- 10. パスワードを忘れた場合：ユーザー名から質問を引っ張る処理 ---
+    # --- 4. パスワードを忘れた場合：ユーザー名から質問を引っ張る処理 ---
     def handle_forgot_check_user(e):
         name = forgot_name_input.value.strip()
         if not name:
@@ -523,7 +522,7 @@ def main(page: ft.Page):
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # --- 11. パスワードリセット実行 ---
+    # --- 5. パスワードリセット実行 ---
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -559,7 +558,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"リセット失敗: {ex}")
 
-    # --- 12. 名前の変更処理 ---
+    # --- 6. 名前の変更処理 ---
     def handle_rename(e):
         nonlocal current_player
         new_name = edit_name_input.value.strip()
@@ -581,7 +580,7 @@ def main(page: ft.Page):
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
-    # --- 13. 非表示設定 ---
+    # --- 7. 非表示設定 ---
     def handle_privacy_change(e):
         if not current_player: return
         try:
@@ -590,7 +589,7 @@ def main(page: ft.Page):
             pass
         update_ranking_ui()
 
-    # --- 14. アカウント完全削除 ---
+    # --- 8. アカウント完全削除 ---
     def execute_delete_account():
         nonlocal current_player
         if not current_player: return
@@ -606,7 +605,7 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         update_all_uis()
 
-    # --- 15. 管理者用データテーブルの描画更新処理 ---
+    # --- 9. 管理者用データテーブルの描画更新処理 ---
     current_sort_column = 3  
     current_sort_ascending = False  
 
