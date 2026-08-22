@@ -688,26 +688,41 @@ def main(page: ft.Page):
         ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
     
+        # 💡【UI改善版】スマホでも絶対に見切れない＆文字がくっきり見えるマイページ画面
     mypage_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
-        ft.Container(content=my_records_list, expand=True), ft.Container(height=5),
-        ft.Container(content=ft.Row([
-            ft.Text("各種設定を開く:", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_50),
-            ft.Row([
-                ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.BLUE_600),
-                ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.BLUE_600),
-                ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.BLUE_600),
-                ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.BLUE_600),
-                ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.BLUE_600),
-                ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_600)
-            ], spacing=1)
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=8, bgcolor=ft.Colors.GREY_100, border_radius=10, border=ft.border.all(1, ft.Colors.GREY_300)),
+        ft.Container(content=my_records_list, expand=True), 
+        ft.Container(height=5),
+        
+        # 💡 下部の設定エリアの見た目・色合いを劇的に改善
+        ft.Container(
+            content=ft.Column([
+                # 💡 文字を「白の太字」に変更して、背景に沈まずハッキリ見えるように変更
+                ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Container(height=3),
+                
+                # 💡 ft.Row から ft.Wrap に変更！スマホの画面幅に合わせてアイコンが自動で折り返します
+                ft.Wrap(
+                    controls=[
+                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300, icon_size=26)
+                    ],
+                    spacing=8,        # ボタン同士の横の隙間
+                    run_spacing=5,    # 折り返したときの上下の隙間
+                    alignment=ft.MainAxisAlignment.START
+                )
+            ]), 
+            padding=12, 
+            bgcolor=ft.Colors.BLUE_GREY_600,  # 💡 背景を濃いブルーグレーにして高級感と視認性をアップ
+            border_radius=10, 
+            border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
+        ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
-    
-    ranking_tab_view = ft.Column(controls=[
-        ft.Container(content=ranking_title_text, padding=15),
-        ft.Container(content=ranking_list, expand=True)
-    ], expand=True, scroll=ft.ScrollMode.AUTO)
+
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
