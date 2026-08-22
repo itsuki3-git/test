@@ -160,7 +160,6 @@ def main(page: ft.Page):
                 raw_g_str = str(p.get("group_number", "1"))
                 user_g_list = [int(t.strip()) for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip()).isdigit()]
                 
-                # 💡 active_ranking_groupを安全に整数比較
                 try:
                     target_g = int(active_ranking_group)
                 except Exception:
@@ -209,13 +208,29 @@ def main(page: ft.Page):
                 )
         page.update()
 
+    # 💡 消えてしまっていたゲーム結果保存関数をここに完全復活させました
+    def save_current_game(e):
+        if not current_player: return
+        total_score = calculate_total_score_ui_only()
+        if total_score == 0: show_alert("0点の記録は保存できません。"); return
+        try:
+            supabase.table("records").insert({"player": current_player, "final_score": total_score, "apple": counts["apple"], "orange": counts["orange"], "grape": counts["grape"], "date": get_jst_now_str()}).execute()
+        except Exception as ex: show_alert(f"記録保存失敗: {ex}"); return
+        reset_current_game(None); update_all_uis()
+        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True)); page.update()
+
+    # 💡 消えてしまっていた個人記録削除関数をここに完全復活させました
+    def delete_saved_record(target_id):
+        try: supabase.table("records").delete().eq("id", target_id).execute()
+        except Exception: return
+        update_all_uis()
+
     # --- 2. 表示グループ同期ロジック（自由設定対応 ＆ 強制再集計仕様） ---
     def refresh_ranking_dropdown_options():
-        # 現在選択されている値を一時退避
         current_value = ranking_group_dropdown.value
         ranking_group_dropdown.options.clear()
         
-        # 💡【管理者限定機能】admin の場合は、固定数字を使わず、全ユーザーの最新データをリアルタイム解析
+        # 💡【管理者限定機能】固定数字を使わず、全ユーザーの最新データをリアルタイム解析
         if current_player == "admin":
             try:
                 all_priv = supabase.table("privacy").select("group_number").execute()
@@ -225,12 +240,12 @@ def main(page: ft.Page):
                     for row in all_priv.data:
                         raw_val = row.get("group_number")
                         if raw_val:
-                            # 💡 一般プレイヤーが「自由にカンマ区切りで入力した数字」をすべて残さず抽出
+                            # 一般プレイヤーが「自由にカンマ区切りで入力した数字」をすべて残さず自動抽出
                             for token in str(raw_val).replace("，", ",").split(","):
                                 if (t := token.strip()).isdigit():
                                     detected_groups.add(int(t))
                 
-                # 💡 ユーザーが自由に作ったグループ番号（例: 1, 3, 5, 99...）が若い順に100%自動で並びます
+                # ユーザーが自由に作ったグループ番号が若い順に100%全自動で並びます
                 for g in sorted(list(detected_groups)):
                     label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
@@ -241,7 +256,7 @@ def main(page: ft.Page):
             for g in my_group_list: 
                 ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
         
-        # 💡 退避していた選択値を復元（なければ初期値をバインド）
+        # 退避していた選択値を復元（なければ初期値をバインド）
         if current_value and any(opt.key == current_value for opt in ranking_group_dropdown.options):
             ranking_group_dropdown.value = current_value
         else:
@@ -253,6 +268,7 @@ def main(page: ft.Page):
         nonlocal active_ranking_group
         active_ranking_group = e.control.value
         update_ranking_ui()
+
 
     # --- 2. 既存ユーザーのログイン処理 ---
     def handle_existing_login(e):
