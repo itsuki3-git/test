@@ -70,6 +70,12 @@ def main(page: ft.Page):
     def hash_password(password: str) -> str:
         return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
+        # 💡 確実に日本時間(JST)の文字列を取得するヘルパー関数
+    def get_jst_now_str() -> str:
+        from datetime import timezone, timedelta
+        jst = timezone(timedelta(hours=9))
+        return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
+
     # --- 既存ユーザーのログイン ---
     def handle_existing_login(e):
         nonlocal current_player
@@ -82,7 +88,6 @@ def main(page: ft.Page):
             hashed_pass = hash_password(input_pass)
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
 
-            # 💡【完全修正】リストが空、またはデータが1件もない場合は弾く
             if not res.data or len(res.data) == 0:
                 show_alert("名前またはパスワードが間違っています。")
                 return
@@ -92,11 +97,17 @@ def main(page: ft.Page):
 
             # プライバシー設定の読み込み
             priv_res = supabase.table("privacy").select("is_visible").eq("username", input_name).execute()
-            # 💡【完全修正】リストの0番目（最初の1件）から安全に値を取り出す
             if priv_res.data and len(priv_res.data) > 0:
                 ranking_switch.value = priv_res.data[0].get("is_visible", True)
             else:
                 ranking_switch.value = True
+                
+            # 💡【最終ログイン日時更新】ログイン成功時に日本時間で日時を記録
+            # 💡（※事前に records テーブル等ではなく、独立した処理として最も手軽な「最新ゲーム記録の日付欄」に空スコア等で同期させるか、あるいは既存の records へのインサートを行います。ここでは管理画面のロジック（recordsから日付を引っ張る仕様）に合わせ、ログイン時にスコア0の内訳空で「ログイン履歴」として1件レコードを追加します）
+            supabase.table("records").insert({
+                "player": input_name, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
+            }).execute()
+
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -111,7 +122,6 @@ def main(page: ft.Page):
             show_alert("プレイヤー名とパスワードを入力してください。")
             return
         
-        # adminという名前での登録をブロック
         if input_name.lower() == "admin":
             show_alert("「admin」という名前は管理者専用のため登録できません。")
             return
@@ -132,6 +142,12 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             ranking_switch.value = True
+            
+            # 💡【新規登録時の日時更新】登録と同時に日本時間で記録を1件作成
+            supabase.table("records").insert({
+                "player": input_name, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
+            }).execute()
+
         except Exception as ex:
             show_alert(f"登録エラー: {ex}")
             return
@@ -145,7 +161,6 @@ def main(page: ft.Page):
         edit_name_input.value = current_player
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
-            # 💡【完全修正】リストの0番目の辞書から安全に質問文を取得
             if res.data and len(res.data) > 0:
                 mypage_question_input.value = res.data[0].get("secret_question") or ""
                 mypage_answer_input.value = ""
@@ -154,7 +169,6 @@ def main(page: ft.Page):
         login_view.visible = False
         main_tab_view.visible = True
         
-        # 管理者タブの制御
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 4:
@@ -175,14 +189,20 @@ def main(page: ft.Page):
                 res = supabase.table("users").select("username").eq("username", saved_user).eq("password", hashed_pass).execute()
                 if res.data and len(res.data) > 0:
                     priv_res = supabase.table("privacy").select("is_visible").eq("username", saved_user).execute()
-                    # 💡【完全修正】リストの0番目の辞書から設定を取得
                     if priv_res.data and len(priv_res.data) > 0:
                         ranking_switch.value = priv_res.data[0].get("is_visible", True)
                     else:
                         ranking_switch.value = True
+                        
+                    # 💡【自動ログイン時の日時更新】自動ログイン成功時にも日本時間で記録を同期
+                    supabase.table("records").insert({
+                        "player": saved_user, "final_score": 0, "apple": 0, "orange": 0, "grape": 0, "date": get_jst_now_str()
+                    }).execute()
+
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
                 pass
+
 
     # --- マイページでのパスワード変更処理 ---
     def handle_change_password(e):
