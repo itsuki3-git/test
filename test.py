@@ -491,30 +491,25 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-    # 💡 現在のソート状態を記憶する変数 (初期状態：最高得点の降順)
-    # column_index -> 0: プレイヤー名, 1: 最終ログイン日時, 2: 最高得点
+    # 💡 現在のソート状態を記憶する変数
     current_sort_column = 2  
     current_sort_ascending = False  
 
     # 💡【管理者用機能】ヘッダークリック時に呼び出されるソートトリガー関数
     def handle_admin_table_sort(e):
         nonlocal current_sort_column, current_sort_ascending
-        # クリックされた列番号が今と同じなら昇降を反転、違う列なら昇順(True)からスタート
         if current_sort_column == e.column_index:
             current_sort_ascending = not current_sort_ascending
         else:
             current_sort_column = e.column_index
             current_sort_ascending = True
         
-        # 表のヘッダーにソート矢印アイコンを表示するための状態をFletに伝える
         admin_data_table.sort_column_index = current_sort_column
         admin_data_table.sort_ascending = current_sort_ascending
-        
-        # データを並び替えて再描画
         update_admin_ui()
 
-    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理
-    def update_admin_ui():
+    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理（検索対応版）
+    def update_admin_ui(e=None):
         if current_player != "admin": return
         admin_data_table.rows.clear()
         try:
@@ -529,6 +524,12 @@ def main(page: ft.Page):
             summary_data = []
             for u in all_users:
                 username = u["username"]
+                
+                # 💡【検索機能のフィルター】検索ボックスに入力がある場合、名前に含まれていないユーザーはスキップ
+                search_keyword = admin_search_input.value.strip().lower()
+                if search_keyword and search_keyword not in username.lower():
+                    continue
+                    
                 user_records = [r for r in all_records if r["player"] == username]
                 
                 max_score = max([r["final_score"] for r in user_records]) if user_records else 0
@@ -540,12 +541,12 @@ def main(page: ft.Page):
                     "latest_date": latest_date
                 })
             
-            # 💡【機能拡張】記憶された状態（列・昇降）に基づいてデータを並び替え
-            if current_sort_column == 0:    # プレイヤー名でソート
+            # 記憶された状態（列・昇降）に基づいてデータを並び替え
+            if current_sort_column == 0:
                 summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
-            elif current_sort_column == 1:  # 最終ログイン日時でソート
+            elif current_sort_column == 1:
                 summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
-            elif current_sort_column == 2:  # 最高得点でソート
+            elif current_sort_column == 2:
                 summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
 
             # テーブルに行を追加していく
@@ -594,6 +595,14 @@ def main(page: ft.Page):
 
     action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
 
+    # 💡【検索機能UI】文字が入力されるたびにリアルタイムで表を絞り込む検索欄
+    admin_search_input = ft.TextField(
+        label="プレイヤー名で検索",
+        prefix_icon=ft.Icons.SEARCH,
+        on_change=lambda e: update_admin_ui(),
+        expand=True
+    )
+
     admin_data_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
@@ -610,43 +619,32 @@ def main(page: ft.Page):
         expand=True 
     )
 
-    # 💡【全タブ共通ヘッダー】どのタブを開いていても一番上に固定で表示されるログアウトバー
-    global_header_bar = ft.Container(
-        content=ft.Row(
-            controls=[
-                logged_in_user_text,
-                ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)
-            ], 
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-        ), 
-        padding=10, 
-        bgcolor=ft.Colors.GREY_100, 
-        border_radius=8
-    )
-
-        # --- 各種表示構築 ---
+    # 💡【管理者用UI】最上部に検索ボックスをガチッと配置
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
+            ft.Container(content=ft.Row([admin_search_input]), padding=ft.padding.only(left=10, right=10, bottom=5)),
             ft.Container(height=5),
-            ft.ListView(controls=[admin_data_table], expand=True)
+            ft.ListView(
+                controls=[admin_data_table], 
+                expand=True
+            )
         ], expand=True
     )
 
+    # --- 各種表示構築 ---
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: (setattr(forgot_name_input, "value", ""), setattr(forgot_answer_input, "value", ""), setattr(forgot_new_pass_input, "value", ""), setattr(forgot_question_text, "value", "プレイヤー名を入力して「質問を確認」を押してください"), page.open(forgot_dialog)))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
-    
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
         ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
         ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
-    
     mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)), ft.Container(content=my_records_list, expand=True), ft.Container(height=5), ft.Container(content=ft.Row([ft.Text("各種設定を開く:", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_50), ft.Row([ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.BLUE_600), ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_600)], spacing=1)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=8, bgcolor=ft.Colors.GREY_100, border_radius=10, border=ft.border.all(1, ft.Colors.GREY_300)),], expand=True, scroll=ft.ScrollMode.AUTO)
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("総合得点ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=15), ft.Container(content=ranking_list, expand=True)], expand=True, scroll=ft.ScrollMode.AUTO)
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True)
 
-    # 💡 共通ヘッダーとタブメニューを縦に並べるColumn（ログイン前は非表示に設定）
+    # 共通ヘッダーとタブメニューの組み立て
     authenticated_view = ft.Column(
         controls=[
             global_header_bar,
@@ -656,12 +654,10 @@ def main(page: ft.Page):
         visible=False
     )
 
-    # 画面に2つの主要なビューを登録
     page.add(login_view, authenticated_view)
 
     calculate_total_score_ui_only()
     
-    # 💡 トリッキーなネストを廃止した超シンプルなUIリフレッシュ
     def update_all_uis():
         update_my_records_ui()
         update_ranking_ui()
