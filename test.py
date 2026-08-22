@@ -22,7 +22,7 @@ def main(page: ft.Page):
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     current_player = None
-    # 💡 複数グループ対応用の初期変数
+    # 💡 複数グループ対応用の初期変数群
     my_group_list = []  
     active_ranking_group = 1  
     
@@ -55,10 +55,8 @@ def main(page: ft.Page):
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
     
-    # 💡【エラー原因の完全復活】消えてしまっていたランキングのタイトルテキストパーツをここで確実に定義
+    # ランキング用の上部コンポーネント定義
     ranking_title_text = ft.Text(value="総合ハイスコアランキング (グループ1)", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
-    
-    # 💡 ランキング画面用のグループ切り替えドロップダウン
     ranking_group_dropdown = ft.Dropdown(
         label="表示グループ切り替え",
         width=180,
@@ -72,6 +70,7 @@ def main(page: ft.Page):
     mypage_question_input = ft.TextField(label="新しく登録する「秘密の質問」", hint_text="例: 初めて飼ったペットの名前は？")
     mypage_answer_input = ft.TextField(label="質問の答え", hint_text="答えを入力してください")
 
+    # --- 共通ユーティリティ関数 ---
     def show_alert(message, title="エラー"):
         alert_dialog = ft.AlertDialog(title=ft.Text(title), content=ft.Text(message))
         alert_dialog.actions = [ft.TextButton("OK", on_click=lambda e: (setattr(alert_dialog, "open", False), page.update()))]
@@ -84,10 +83,163 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
+    # --- 1. [順序適正化] フルーツ選択ボタンの生成ヘルパー関数 ---
+    def create_fruit_selector(label, fruit_key, count_text_component, color):
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True),
+                    ft.Row(
+                        controls=[
+                            ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)),
+                            count_text_component,
+                            ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))
+                        ], spacing=5
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+        )
 
-    def get_jst_now_str() -> str:
-        jst = timezone(timedelta(hours=9))
-        return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
+    # --- 2. スコア計算・操作ロジック ---
+    def calculate_total_score_ui_only():
+        total = (counts["apple"] * FRUIT_POINTS["apple"] + counts["orange"] * FRUIT_POINTS["orange"] + counts["grape"] * FRUIT_POINTS["grape"])
+        score_display.value = str(total)
+        return total
+
+    def adjust_count(fruit, delta):
+        new_count = counts[fruit] + delta
+        if new_count >= 0:
+            counts[fruit] = new_count
+            if fruit == "apple": apple_count_text.value = str(new_count)
+            elif fruit == "orange": orange_count_text.value = str(new_count)
+            elif fruit == "grape": grape_count_text.value = str(new_count)
+            calculate_total_score_ui_only()
+            page.update()
+
+    def reset_current_game(e):
+        for fruit in counts: counts[fruit] = 0
+        apple_count_text.value, orange_count_text.value, grape_count_text.value = "0", "0", "0"
+        calculate_total_score_ui_only()
+        if e: page.update()
+
+    def update_all_uis():
+        update_my_records_ui()
+        update_ranking_ui()
+        if current_player == "admin":
+            update_admin_ui()
+
+    # --- 3. マイページ（自分だけの記録）の描画更新 ---
+    def update_my_records_ui():
+        my_records_list.controls.clear()
+        if not current_player: return
+        try:
+            res = supabase.table("records").select("*").execute()
+            my_filtered = [r for r in (res.data or []) if r.get("player") == current_player and r.get("final_score", 0) > 0]
+        except Exception as ex:
+            my_records_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+        if not my_filtered:
+            my_records_list.controls.append(ft.Text("あなたの保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
+        else:
+            for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
+                my_records_list.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Column([
+                                    ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700),
+                                    ft.Text(f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)
+                                ], expand=True),
+                                ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50
+                    )
+                )
+        page.update()
+
+    # --- 4. 全体のランキング描画更新（複数グループ・切り替え対応版） ---
+    def update_ranking_ui():
+        ranking_list.controls.clear()
+        ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+        try:
+            privacy_res = supabase.table("privacy").select("*").execute()
+            privacy_list = privacy_res.data or []
+            hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
+            
+            same_group_users = []
+            for p in privacy_list:
+                user_name = p.get("username")
+                raw_g_str = str(p.get("group_number", "1"))
+                user_g_list = []
+                for token in raw_g_str.replace("，", ",").split(","):
+                    t_strip = token.strip()
+                    if t_strip.isdigit():
+                        user_g_list.append(int(t_strip))
+                if active_ranking_group in user_g_list:
+                    same_group_users.append(user_name)
+            
+            records_res = supabase.table("records").select("*").execute()
+            all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
+        except Exception as ex:
+            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+            
+        visible_records = [r for r in all_records if r["player"] not in hidden_users and r["player"] in same_group_users]
+        if not visible_records:
+            ranking_list.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
+        else:
+            sorted_records = sorted(visible_records, key=lambda x: x["final_score"], reverse=True)
+            for index, record in enumerate(sorted_records):
+                rank = index + 1
+                if rank == 1: rank_color, rank_text = ft.Colors.AMBER_500, f"🥇 {rank}位"
+                elif rank == 2: rank_color, rank_text = ft.Colors.BLUE_GREY_300, f"🥈 {rank}位"
+                elif rank == 3: rank_color, rank_text = ft.Colors.BROWN_400, f"🥉 {rank}位"
+                else: rank_color, rank_text = ft.Colors.BLUE_GREY_700, f"  {rank}位"
+                ranking_list.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
+                                ft.Column([
+                                    ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
+                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)
+                                ], expand=True),
+                                ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
+                    )
+                )
+        page.update()
+
+    def save_current_game(e):
+        if not current_player: return
+        total_score = (counts["apple"] * FRUIT_POINTS["apple"] + counts["orange"] * FRUIT_POINTS["orange"] + counts["grape"] * FRUIT_POINTS["grape"])
+        if total_score == 0:
+            show_alert("0点の記録は保存できません。フルーツの数を追加してください。")
+            return
+        date_str = get_jst_now_str()
+        try:
+            supabase.table("records").insert({
+                "player": current_player, "final_score": total_score, "apple": counts["apple"],
+                "orange": counts["orange"], "grape": counts["grape"], "date": date_str
+            }).execute()
+        except Exception as ex:
+            show_alert(f"記録保存失敗: {ex}")
+            return
+        reset_current_game(None)
+        update_all_uis()
+        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
+        page.update()
+
+    def delete_saved_record(target_id):
+        try:
+            supabase.table("records").delete().eq("id", target_id).execute()
+        except Exception:
+            return
+        update_all_uis()
 
     # --- 1. ランキング用のドロップダウン同期と切り替え処理 ---
     def refresh_ranking_dropdown_options():
@@ -118,7 +270,7 @@ def main(page: ft.Page):
 
     # --- 2. 既存ユーザーのログイン ---
     def handle_existing_login(e):
-        nonlocal current_player, my_group_list  # 💡 エラーの原因だった「current_group」を除去しました
+        nonlocal current_player, my_group_list
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -161,7 +313,7 @@ def main(page: ft.Page):
 
     # --- 3. 新規プレイヤーの登録 ---
     def handle_new_register(e):
-        nonlocal current_player, my_group_list  # 💡 エラーの原因だった「current_group」を除去しました
+        nonlocal current_player, my_group_list
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass:
@@ -264,7 +416,6 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         page.update()
 
-    
     # --- 1. マイページでのパスワード変更処理 ---
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
@@ -312,7 +463,7 @@ def main(page: ft.Page):
 
     # --- 3. マイページでのグループ番号の保存処理 ---
     def handle_save_group_number(e):
-        nonlocal my_group_list  # 💡 エラーの原因だった「current_group」を完全に除去しました
+        nonlocal my_group_list
         grp_str = mypage_group_input.value.strip()
         if not grp_str:
             show_alert("グループ番号を入力してください。")
@@ -454,160 +605,10 @@ def main(page: ft.Page):
         authenticated_view.visible = False
         update_all_uis()
 
-    # --- マイページ（自分だけの記録）の描画更新 ---
-    def update_my_records_ui():
-        my_records_list.controls.clear()
-        if not current_player: return
-        try:
-            res = supabase.table("records").select("*").execute()
-            my_filtered = [r for r in (res.data or []) if r.get("player") == current_player and r.get("final_score", 0) > 0]
-        except Exception as ex:
-            my_records_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
-            page.update()
-            return
-        if not my_filtered:
-            my_records_list.controls.append(ft.Text("あなたの保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
-        else:
-            for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                my_records_list.controls.append(
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Column([
-                                    ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700),
-                                    ft.Text(f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)
-                                ], expand=True),
-                                ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                        ), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50
-                    )
-                )
-        page.update()
-
-    # --- 全体のランキング描画更新（複数グループ・切り替え対応） ---
-    def update_ranking_ui():
-        ranking_list.controls.clear()
-        # 💡 タイトルを現在「選択・表示中」のグループ番号に動的更新
-        ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
-        try:
-            privacy_res = supabase.table("privacy").select("*").execute()
-            privacy_list = privacy_res.data or []
-            
-            # ランキング非表示ユーザーをリスト化
-            hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
-            
-            # 💡【複数設定対応】各ユーザーのカンマ区切りの文字列を分解し、現在選択中のグループに含まれているユーザーを抽出
-            same_group_users = []
-            for p in privacy_list:
-                user_name = p.get("username")
-                raw_g_str = str(p.get("group_number", "1"))
-                
-                # 文字列を分解して数字のリストにする
-                user_g_list = []
-                for token in raw_g_str.replace("，", ",").split(","):
-                    t_strip = token.strip()
-                    if t_strip.isdigit():
-                        user_g_list.append(int(t_strip))
-                        
-                # 現在切り替え表示中のグループ（active_ranking_group）に所属していればリストに追加
-                if active_ranking_group in user_g_list:
-                    same_group_users.append(user_name)
-            
-            records_res = supabase.table("records").select("*").execute()
-            all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
-        except Exception as ex:
-            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
-            page.update()
-            return
-            
-        # 非表示設定ではなく、かつ「現在表示中のグループに所属するプレイヤー」の記録のみに絞り込む
-        visible_records = [r for r in all_records if r["player"] not in hidden_users and r["player"] in same_group_users]
-        
-        if not visible_records:
-            ranking_list.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
-        else:
-            sorted_records = sorted(visible_records, key=lambda x: x["final_score"], reverse=True)
-            for index, record in enumerate(sorted_records):
-                rank = index + 1
-                if rank == 1: rank_color, rank_text = ft.Colors.AMBER_500, f"🥇 {rank}位"
-                elif rank == 2: rank_color, rank_text = ft.Colors.BLUE_GREY_300, f"🥈 {rank}位"
-                elif rank == 3: rank_color, rank_text = ft.Colors.BROWN_400, f"🥉 {rank}位"
-                else: rank_color, rank_text = ft.Colors.BLUE_GREY_700, f"  {rank}位"
-                ranking_list.controls.append(
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
-                                ft.Column([
-                                    ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
-                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)
-                                ], expand=True),
-                                ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                        ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
-                    )
-                )
-        page.update()
-
-    # --- スコア操作 ---
-    def reset_current_game(e):
-        for fruit in counts: counts[fruit] = 0
-        apple_count_text.value, orange_count_text.value, grape_count_text.value = "0", "0", "0"
-        calculate_total_score_ui_only()
-        if e: page.update()
-
-    def save_current_game(e):
-        if not current_player: return
-        total_score = (counts["apple"] * FRUIT_POINTS["apple"] + counts["orange"] * FRUIT_POINTS["orange"] + counts["grape"] * FRUIT_POINTS["grape"])
-        if total_score == 0:
-            show_alert("0点の記録は保存できません。フルーツの数を追加してください。")
-            return
-        from datetime import timezone, timedelta
-        jst = timezone(timedelta(hours=9))
-        date_str = datetime.now(jst).strftime("%Y/%m/%d %H:%M")
-        try:
-            supabase.table("records").insert({
-                "player": current_player, "final_score": total_score, "apple": counts["apple"],
-                "orange": counts["orange"], "grape": counts["grape"], "date": date_str
-            }).execute()
-        except Exception as ex:
-            show_alert(f"記録保存失敗: {ex}")
-            return
-        reset_current_game(None)
-        update_all_uis()
-        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
-        page.update()
-
-    def delete_saved_record(target_id):
-        try:
-            supabase.table("records").delete().eq("id", target_id).execute()
-        except Exception:
-            return
-        update_all_uis()
-
-    # --- 1. 最初に関数やソート変数をすべて定義（順序バグを完全封殺） ---
+    # --- 9. 管理者用データテーブルの描画更新処理 ---
     current_sort_column = 3  
     current_sort_ascending = False  
 
-    # フルーツボタン生成関数
-    def create_fruit_selector(label, fruit_key, count_text_component, color):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Text(f"{label} ({FRUIT_POINTS[fruit_key]}点)", size=16, weight=ft.FontWeight.W_500, expand=True),
-                    ft.Row(
-                        controls=[
-                            ft.IconButton(icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, icon_color=color, on_click=lambda e: adjust_count(fruit_key, -1)),
-                            count_text_component,
-                            ft.IconButton(icon=ft.Icons.ADD_CIRCLE, icon_color=color, on_click=lambda e: adjust_count(fruit_key, 1))
-                        ], spacing=5
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
-        )
-
-    # 管理者テーブルのヘッダークリックソート
     def handle_admin_table_sort(e):
         nonlocal current_sort_column, current_sort_ascending
         if current_sort_column == e.column_index:
@@ -619,7 +620,6 @@ def main(page: ft.Page):
         admin_data_table.sort_ascending = current_sort_ascending
         update_admin_ui()
 
-    # 管理者用データテーブルの描画更新（複数グループテキスト対応）
     def update_admin_ui():
         if current_player != "admin": return
         admin_data_table.rows.clear()
@@ -631,9 +631,7 @@ def main(page: ft.Page):
             all_privacy = privacy_res.data or []
             all_records = records_res.data or []
             
-            # 💡【複数設定対応】グループテキスト（例: "1, 3, 5"）を辞書にマッピング
             group_map = {p["username"]: str(p.get("group_number", "1")) for p in all_privacy}
-            
             summary_data = []
             
             try:
@@ -650,8 +648,6 @@ def main(page: ft.Page):
                 valid_scores = [r["final_score"] for r in user_records if r.get("final_score", 0) > 0]
                 max_score = max(valid_scores) if valid_scores else 0
                 latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
-                
-                # 所属グループ文字列を取得
                 user_group_str = group_map.get(username, "1")
                 
                 summary_data.append({"username": username, "group_str": user_group_str, "max_score": max_score, "latest_date": latest_date})
@@ -671,7 +667,6 @@ def main(page: ft.Page):
                 admin_data_table.rows.append(
                     ft.DataRow(cells=[
                         ft.DataCell(ft.Text(name_display, width=100, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
-                        # 💡【管理画面対応】複数グループのカンマ区切りテキストをそのままセルに描画
                         ft.DataCell(ft.Text(data["group_str"], width=80)),
                         ft.DataCell(ft.Text(data["latest_date"], width=150, size=12)),
                         ft.DataCell(ft.Text(f"{data['max_score']}点", width=80, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
@@ -681,7 +676,7 @@ def main(page: ft.Page):
             admin_data_table.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
-    # --- 2. 各種ダイアログや共通コンポーネントの設定（Flet 0.28.3仕様） ---
+    # --- 10. 各種ダイアログや共通コンポーネントの設定（Flet 0.28.3仕様） ---
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_name_dialog, "open", False), page.update())), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_pass_dialog, "open", False), page.update())), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     secret_question_dialog = ft.AlertDialog(title=ft.Text("🛡️ 秘密の質問の設定"), content=ft.Container(content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: (setattr(secret_question_dialog, "open", False), page.update())), ft.ElevatedButton("設定を保存", on_click=handle_save_secret_question, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
@@ -705,7 +700,7 @@ def main(page: ft.Page):
         rows=[], heading_row_color=ft.Colors.BLUE_GREY_50, divider_thickness=1, horizontal_margin=10, column_spacing=10, sort_column_index=3, sort_ascending=False, expand=True 
     )
 
-    # --- 3. 各種表示レイアウトの構築 ---
+    # --- 11. 各種表示レイアウトの構築 ---
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
@@ -750,7 +745,7 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【レイアウト拡張】タイトル表示の横に、グループ切り替え用ドロップダウンを並べて配置！
+    # 💡【レイアウト拡張】タイトル表示の横に、複数グループの切り替え用ドロップダウンを配置！
     ranking_tab_view = ft.Column(controls=[
         ft.Container(
             content=ft.Row([
@@ -788,3 +783,4 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
