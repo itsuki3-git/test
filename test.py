@@ -600,10 +600,6 @@ def main(page: ft.Page):
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
 
-    # ★ここに貼り付けます！
-    supabase.table("users").upsert({"username": "admin", "password": hash_password("admin1234")}, on_conflict="username").execute()
-    supabase.table("privacy").upsert({"username": "admin", "is_visible": True}, on_conflict="username").execute()
-    
     check_auto_login()
     page.update()
 
