@@ -469,7 +469,7 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-    # 💡【管理者用機能】管理者タブの情報をリフレッシュ＆ソートして描画する処理
+    # 💡【管理者用機能】管理者タブの情報をリフレッシュ＆ソートして描画する処理（バグ完全排除版）
     def update_admin_ui(e=None):
         if current_player != "admin": return
         admin_users_list.controls.clear()
@@ -489,7 +489,7 @@ def main(page: ft.Page):
                 
                 # 最高得点の算出（記録がない場合は0点）
                 max_score = max([r["final_score"] for r in user_records]) if user_records else 0
-                # 最新ゲーム日時の算出（ログイン日時の代わりとして最新の記録日時を使用。ない場合は「なし」）
+                # 最新ゲーム日時の算出（ない場合は「記録なし」）
                 latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
                 
                 summary_data.append({
@@ -519,7 +519,11 @@ def main(page: ft.Page):
                 admin_users_list.controls.append(
                     ft.Container(
                         content=ft.Row([
-                            ft.Icon(ft.Icons.SUPERVISED_USER_CIRCLE if is_admin_user else ft.Icons.PERSON, color=ft.Colors.BLUE_600 if is_admin_view_btn else ft.Colors.BLUE_GREY_400),
+                            # 💡【バグ修正】未定義の変数を削除し、adminユーザーなら青、一般ユーザーならグレーのアイコンに固定
+                            ft.Icon(
+                                ft.Icons.SUPERVISED_USER_CIRCLE if is_admin_user else ft.Icons.PERSON, 
+                                color=ft.Colors.BLUE_600 if is_admin_user else ft.Colors.BLUE_GREY_400
+                            ),
                             ft.Column([
                                 ft.Text(f"👤 {data['username']}", size=15, weight=ft.FontWeight.BOLD),
                                 ft.Text(f"📅 最新記録日時: {data['latest_date']}", size=12, color=ft.Colors.GREY_600),
@@ -532,6 +536,7 @@ def main(page: ft.Page):
         except Exception as ex:
             admin_users_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
         page.update()
+
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
