@@ -971,21 +971,21 @@ def main(page: ft.Page):
         ]
     )
 
-         main_tab_view = ft.Tabs(
-            selected_index=0,
-            animation_duration=300,
-            tabs=[
-                ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
-                ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
-                ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
-            ],
-            expand=True, # 💡 一番外側のTabsだけがexpand=Trueを持つのがFletの正しい構造です！
-            on_change=lambda e: (
-                refresh_ranking_dropdown_options(),
-                update_ranking_ui() if main_tab_view.selected_index == 2 else None,
-                page.update()
-            )
+    main_tab_view = ft.Tabs(
+        selected_index=0,
+        animation_duration=300,
+        tabs=[
+            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
+            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
+        ],
+        expand=True, # 💡 一番外側のTabsだけがexpand=Trueを持つのがFletの正しい構造です！
+        on_change=lambda e: (
+            refresh_ranking_dropdown_options(),
+            update_ranking_ui() if main_tab_view.selected_index == 2 else None,
+            page.update()
         )
+    )
 
 
     authenticated_view = ft.Column(
