@@ -171,8 +171,9 @@ def main(page: ft.Page):
         page.update()
 
     def update_ranking_ui():
-        """どんな型エラーやデータ破損が起きても絶対にクラッシュしない超安全版"""
-        ranking_list.controls.clear()
+        """二重登録の競合とcontrols.controlsの参照バグを修正した完全版"""
+        # 1. まずは中身を完全にクリア（Fletの安全なリセット）
+        ranking_list.controls = [] 
 
         if str(active_ranking_group) == "0":
             ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者専用)"
@@ -180,7 +181,6 @@ def main(page: ft.Page):
             ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
 
         try:
-            # 1. privacy テーブルから全ユーザー情報を安全に取得
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
 
@@ -191,99 +191,73 @@ def main(page: ft.Page):
 
             same_group_users = []
             for p in privacy_list:
-                if not isinstance(p, dict):
-                    continue
-                
-                # カラム名が 'username' と 'player' のどちらでも動くように安全に名前を取得
                 p_name = p.get("username") or p.get("player")
                 if not p_name:
                     continue
-                
-                # 💡 型エラー防御：データが数値(int)でも文字列(str)でも安全にリスト化する
-                raw_g_val = p.get("group_number", 1)
-                user_g_list = []
-                
-                if isinstance(raw_g_val, int):
-                    user_g_list.append(raw_g_val)
-                elif raw_g_val is not None:
-                    # 文字列としてカンマ分割を試みる（全角・半角対応）
-                    for token in str(raw_g_val).replace("，", ",").split(","):
-                        clean_token = token.strip()
-                        if clean_token.isdigit():
-                            user_g_list.append(int(clean_token))
+                raw_g_str = str(p.get("group_number", "1"))
+                user_g_list = [int(t.strip()) for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip()).isdigit()]
 
                 if target_g in user_g_list:
                     same_group_users.append(p_name)
 
-            # 2. records テーブルからスコアデータを安全に取得
             records_res = supabase.table("records").select("*").execute()
-            records_raw = records_res.data or []
-            
-            # スコアが存在し、かつplayer名がしっかりと入っているレコードのみを厳選
-            all_records = []
-            for r in records_raw:
-                if isinstance(r, dict) and r.get("player") and r.get("final_score", 0) > 0:
-                    all_records.append(r)
-
-            # 3. 該当グループのレコードに絞り込み
-            visible_records = [r for r in all_records if r["player"] in same_group_users]
-
-            # 💡 表示できるスコアデータが1件もない場合のメッセージ対応
-            if not visible_records:
-                ranking_list.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.LEADERBOARD_OUTLINED, size=40, color=ft.Colors.GREY_400),
-                            ft.Text("このグループに保存されている記録はありません", color=ft.Colors.GREY_500, size=14),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        alignment=ft.alignment.center,
-                        padding=30
-                    )
-                )
-            else:
-                # プレイヤーごとの自己ベスト（最高スコア）を算出
-                user_best_records = {}
-                for r in visible_records:
-                    p_name = r["player"]
-                    if p_name not in user_best_records or r["final_score"] > user_best_records[p_name]["final_score"]:
-                        user_best_records[p_name] = r
-
-                sorted_records = sorted(list(user_best_records.values()), key=lambda x: x["final_score"], reverse=True)
-
-                # ランキングUIカードの生成
-                for index, record in enumerate(sorted_records):
-                    rank = index + 1
-                    rank_color = ft.Colors.AMBER_500 if rank == 1 else (ft.Colors.BLUE_GREY_300 if rank == 2 else (
-                        ft.Colors.BROWN_400 if rank == 3 else ft.Colors.BLUE_GREY_700))
-                    rank_text = f"🥇 {rank}位" if rank == 1 else (
-                        f"🥈 {rank}位" if rank == 2 else (f"🥉 {rank}位" if rank == 3 else f"  {rank}位"))
-                    
-                    ranking_list.controls.controls.append(
-                        ft.Container(
-                            content=ft.Row(
-                                controls=[
-                                    ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
-                                    ft.Column([
-                                        ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
-                                        ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)
-                                    ], expand=True),
-                                    ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                            ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
-                        )
-                    )
+            all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
         except Exception as ex:
-            # 💡 もしこれでもエラーが起きた場合は、画面上に直接エラー文を吐き出す
-            ranking_list.controls.append(
+            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+
+        visible_records = [r for r in all_records if r["player"] in same_group_users]
+        
+        # 新しい子部品を一時的に格納するための安全なリスト（器）を用意
+        new_controls = []
+
+        if not visible_records:
+            # 💡 データがない場合の案内を一時リストに追加
+            new_controls.append(
                 ft.Container(
-                    content=ft.Text(f"⚠️ ランキング処理内でクラッシュが発生しました:\n{str(ex)}", color=ft.Colors.RED_600, weight=ft.FontWeight.BOLD),
-                    padding=20,
-                    bgcolor=ft.Colors.RED_50,
-                    border_radius=8
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.LEADERBOARD_OUTLINED, size=40, color=ft.Colors.GREY_400),
+                        ft.Text("このグループに公開されている記録はありません", color=ft.Colors.GREY_500, size=14),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    alignment=ft.alignment.center,
+                    padding=30
                 )
             )
+        else:
+            user_best_records = {}
+            for r in visible_records:
+                p_name = r["player"]
+                if p_name not in user_best_records or r["final_score"] > user_best_records[p_name]["final_score"]:
+                    user_best_records[p_name] = r
+
+            sorted_records = sorted(list(user_best_records.values()), key=lambda x: x["final_score"], reverse=True)
+
+            for index, record in enumerate(sorted_records):
+                rank = index + 1
+                rank_color = ft.Colors.AMBER_500 if rank == 1 else (ft.Colors.BLUE_GREY_300 if rank == 2 else (
+                    ft.Colors.BROWN_400 if rank == 3 else ft.Colors.BLUE_GREY_700))
+                rank_text = f"🥇 {rank}位" if rank == 1 else (
+                    f"🥈 {rank}位" if rank == 2 else (f"🥉 {rank}位" if rank == 3 else f"  {rank}位"))
+                
+                # 💡 修正のコア：直接appendするのではなく、用意した一時リストへ安全にカードを追加していく
+                new_controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Text(rank_text, size=18, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
+                                ft.Column([
+                                    ft.Text(f"{record['player']}", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
+                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=12, color=ft.Colors.GREY_600)
+                                ], expand=True),
+                                ft.Text(f"{record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
+                    )
+                )
         
-        # 何が起きても必ず最後に画面を更新する
+        # 💡 最後に、作成したカードのリストを `ranking_list.controls` に一括代入して画面を更新する
+        ranking_list.controls = new_controls
         page.update()
 
     def save_current_game(e):
