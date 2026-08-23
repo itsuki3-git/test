@@ -400,7 +400,9 @@ def main(page: ft.Page):
         parsed_list = []
 
         for row in group_inputs_container.controls:
-            val_str = row.controls.value.strip()
+            # 💡 row.controls[0] と指定することで、行の中の TextField を正確に取得します
+            tf_control = row.controls[0]
+            val_str = tf_control.value.strip() if tf_control.value else ""
             if not val_str:
                 continue
 
@@ -434,6 +436,7 @@ def main(page: ft.Page):
             show_alert(f"所属グループを「{clean_str}」に変更しました！", title="成功")
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
+
 
     def handle_forgot_check_user(e):
         name = forgot_name_input.value.strip()
