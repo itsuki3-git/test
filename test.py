@@ -253,19 +253,17 @@ def main(page: ft.Page):
         page.add(authenticated_view)
         authenticated_view.visible = True
 
-        # ⭕ 修正: 一般ユーザーの「ランキング」タブ(3つ目)を消してしまわないよう、削る処理(pop)を撤廃
-        # 管理者(admin)ログイン時のみ、4つ目の「管理者」タブを動的に追加・削除するロジックに一本化します
-        if current_player == "admin" and len(main_tab_view.tabs) == 2:
+        # ⭕ 修正: タブがベースの3つ（得点計算・マイページ・ランキング）の状態で、adminなら4つ目に「管理者」をドッキングする
+        if current_player == "admin" and len(main_tab_view.tabs) == 3:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
-        elif current_player != "admin" and len(main_tab_view.tabs) == 3:
-            # 💡 もし管理者タブが残っていたら、それだけを安全に削除します
-            pass
+        # 一般ユーザーがログインし直した時に、もし「管理者」タブが残っていたら安全に切り離す（pop）
+        elif current_player != "admin" and len(main_tab_view.tabs) == 4:
+            main_tab_view.tabs.pop()
 
         reset_current_game(None)
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
-
 
     def check_auto_login():
         nonlocal my_group_list
@@ -989,6 +987,9 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO
     )
 
+    # 💡 記述位置チェック: admin_tab_view が main_tab_view よりも上にあることを確認してください
+
+    # ⭕ 修正: ベースの3つのタブ（得点計算、マイページ、ランキング）で初期定義します
     main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
@@ -1004,7 +1005,6 @@ def main(page: ft.Page):
         )
     )
 
-    # ⭕ 修正: もともと「authenticated_view = ...」だった部分を再代入形式にしてエラーを回避
     authenticated_view = ft.Column(
         controls=[
             global_header_bar,
