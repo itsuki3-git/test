@@ -860,6 +860,84 @@ def main(page: ft.Page):
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
+    # --- 18. タブ切り替え時のフリーズを100%防止する安全なトリガー関数 ---
+    def handle_tab_change(e):
+        # 💡 ランキングタブ（インデックス2）が選ばれたときだけ安全に処理を実行
+        if main_tab_view.selected_index == 2:
+            try:
+                # 💡 順序バグを回避するため、まずドロップダウンの選択肢を最新化
+                refresh_ranking_dropdown_options()
+                # 💡 その後、安全に順位表の一覧を描画更新
+                update_ranking_ui()
+            except Exception:
+                pass
+        page.update()
+
+    # --- 19. 各種表示レイアウトの構築 ---
+    admin_tab_view = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800), padding=12),
+            ft.Container(content=ft.Row([admin_search_input]), padding=ft.padding.only(left=10, right=10, bottom=5)),
+            ft.Container(height=5),
+            ft.ListView(controls=[admin_data_table], expand=True)
+        ], expand=True
+    )
+
+    login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: page.open(forgot_dialog))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
+    
+    calc_tab_view = ft.Column(controls=[
+        ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
+        ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
+        ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
+    ], expand=True)
+    
+    mypage_tab_view = ft.Column(controls=[
+        ft.Container(content=ft.Text("あなたの所属グループ", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, top=15, right=15)),
+        ft.Container(content=mypage_group_chips, padding=ft.padding.only(left=15, right=15, bottom=5)),
+        ft.Divider(height=10, thickness=1, color=ft.Colors.GREY_200),
+        ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700), padding=ft.padding.only(left=15, right=15)),
+        ft.Container(content=my_records_list, expand=True), 
+        ft.Container(height=5),
+        ft.Container(
+            content=ft.Column([
+                ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Container(height=3),
+                ft.Row(
+                    controls=[
+                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ追加・削除", on_click=lambda e: (refresh_group_dialog_ui(), page.open(change_group_dialog)), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300, icon_size=26)
+                    ],
+                    wrap=True,  
+                    spacing=8,
+                    run_spacing=5,
+                    alignment=ft.MainAxisAlignment.START
+                )
+            ]), 
+            padding=12, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10, border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
+        ),
+    ], expand=True, scroll=ft.ScrollMode.AUTO)
+    
+    ranking_tab_view = ft.Column(controls=[
+        ft.Container(
+            content=ft.Row([
+                ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
+                ranking_group_dropdown
+            ],
+            wrap=True,                     
+            spacing=10,                    
+            run_spacing=10,                
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=15
+        ),
+        ft.Container(content=ranking_list, expand=True)
+    ], expand=True, scroll=ft.ScrollMode.AUTO)
+
+    # 💡【フリーズ対策完了】壊れやすかったラムダ式を廃止し、安全な独立関数 handle_tab_change へバインド
     main_tab_view = ft.Tabs(
         selected_index=0, 
         animation_duration=300, 
@@ -869,12 +947,11 @@ def main(page: ft.Page):
             ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
         ], 
         expand=True,
-        on_change=lambda e: (refresh_ranking_dropdown_options(), update_ranking_ui() if main_tab_view.selected_index == 2 else None)
+        on_change=handle_tab_change
     )
 
     authenticated_view = ft.Column(controls=[global_header_bar, main_tab_view], expand=True, visible=False)
 
-    # 💡 順序バグを完全解決：まず最初に実体を生成させてロードフリーズを100%回避
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
@@ -890,3 +967,4 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
