@@ -276,7 +276,12 @@ def main(page: ft.Page):
                     rank = index + 1
                     rank_row = ft.Row(spacing=10)
                     rank_row.controls = [
-                        ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
+                        ft.Text(
+                            f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", 
+                            size=16, 
+                            weight=ft.FontWeight.BOLD, 
+                            width=60
+                        ),
                         ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
                         ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
                     ]
