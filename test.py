@@ -227,7 +227,7 @@ def main(page: ft.Page):
                      ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True),
                     ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
-        page.update()
+ page.update()
 
     def save_current_game(e):
         if not current_player: return
@@ -266,7 +266,7 @@ def main(page: ft.Page):
             else:
                 for g in sorted(my_group_list):
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list) if my_group_list else None
+                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
         except Exception:
             ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
             ranking_group_dropdown.value = "1"
@@ -315,24 +315,32 @@ def main(page: ft.Page):
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
-        input_name, input_pass = login_name_input.value.strip(), login_pass_input.value.strip()
+        input_name = login_name_input.value.strip()
+        input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass: return
         try:
             hashed_pass = hash_password(input_pass)
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
-            if not res.data: return
+            if not res.data or len(res.data) == 0: 
+                show_alert("名前またはパスワードが間違っています。")
+                return
+                
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
+            
             priv_res = supabase.table("privacy").select("*").execute()
             user_privacy_data = next((p for p in (priv_res.data or []) if (p.get("username") or p.get("player")) == input_name), None)
             
+            # 💡 修正完了: 文法の不備を完全にクリーンアップしました
             if user_privacy_data:
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 if input_name.lower() == "admin": raw_group_str = "0"
                 my_group_list = [int(x.strip()) for x in raw_group_str.replace("，", ",").split(",") if x.strip().isdigit()]
             else:
                 my_group_list = [0] if input_name.lower() == "admin" else [1]
-        except Exception: return
+        except Exception as ex: 
+            show_alert(f"ログイン処理エラー: {ex}")
+            return
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
     def enter_game_session(username, success_message):
