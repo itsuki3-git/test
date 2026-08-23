@@ -263,6 +263,7 @@ def main(page: ft.Page):
                 if selected_g in p_groups and p_name: allowed_players.add(p_name)
             if selected_g == "0" or current_player == "admin": allowed_players.add("admin")
             filtered = [r for r in records_raw if r.get("player") in allowed_players]
+            
             if not filtered:
                 ranking_list.controls.append(ft.Container(content=ft.Text("記録がまだありません", color=ft.Colors.GREY_500), alignment=ft.alignment.center))
             else:
@@ -270,17 +271,18 @@ def main(page: ft.Page):
                 for r in filtered:
                     p = r["player"]
                     if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
-                        for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
-                            rank = index + 1
-                            ranking_list.controls.append(ft.Container(content=ft.Row([
-                                # 💡 各項目の後ろにしっかりとカンマ「,」を配置して結合エラーを防ぎます
-                                ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
-                                ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD), # 👈 ここにカンマが必要です
-                                ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                            ]), padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8))
-
+                
+                # 💡 この下の行から左端のスペースの数を完全に統一しました
+                for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
+                    rank = index + 1
+                    ranking_list.controls.append(ft.Container(content=ft.Row([
+                        ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
+                        ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                    ]), padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8))
         except Exception: pass
         page.update()
+
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
