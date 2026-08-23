@@ -908,7 +908,8 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
         padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
-    calc_tab_view = ft.Column(controls=[
+    calc_tab_view = ft.Column(
+    controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display],
                                        alignment=ft.MainAxisAlignment.CENTER,
                                        horizontal_alignment=ft.CrossAxisAlignment.CENTER),
@@ -917,60 +918,45 @@ def main(page: ft.Page):
                                         create_fruit_selector("🍊 みかん", "orange", orange_count_text,
                                                               ft.Colors.ORANGE_600),
                                         create_fruit_selector("🍇 ブドウ", "grape", grape_count_text,
-                                                              ft.Colors.PURPLE_600)], spacing=15), padding=10,
-                     expand=True),
+                                                              ft.Colors.PURPLE_600)], spacing=15), padding=10),
         ft.Container(content=ft.Row(controls=[
-            # ─── 修正：リセットボタンのテキスト統一 ───
             ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game,
                               style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
             ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game,
                               bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
             alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
-    ], expand=True)
+    ]
+)
 
-    mypage_tab_view = ft.Column(controls=[
-        ft.Container(content=ft.Text("あなたの過去 of ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
-                                     color=ft.Colors.BLUE_GREY_700),
-                     padding=ft.padding.only(left=15, top=15, right=15)),
-        ft.Container(content=my_records_list, expand=True),
-        ft.Container(height=5),
-        ft.Container(
-            content=ft.Column([
-                ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Container(height=3),
-                ft.Row(
-                    controls=[
-                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更",
-                                      on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE,
-                                      icon_size=26),
-                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更",
-                                      on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE,
-                                      icon_size=26),
-                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更",
-                                      on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE,
-                                      icon_size=26),
-                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定",
-                                      on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE,
-                                      icon_size=26),
-                        ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定",
-                                      on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE,
-                                      icon_size=26),
-                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除",
-                                      on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300,
-                                      icon_size=26)
-                    ],
-                    wrap=True,
-                    spacing=8,
-                    run_spacing=5,
-                    alignment=ft.MainAxisAlignment.START
-                )
-            ]),
-            padding=12, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10,
-            border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
-        ),
-    ], expand=True, scroll=ft.ScrollMode.AUTO)
+    mypage_tab_view = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("あなたの過去 of ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
+                                         color=ft.Colors.BLUE_GREY_700),
+                         padding=ft.padding.only(left=15, top=15, right=15)),
+            ft.Container(content=my_records_list, height=250), # 💡 ListViewの高さを250pxに固定して潰れを防止！
+            ft.Container(height=5),
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ft.Container(height=3),
+                    ft.Row(
+                        controls=[
+                            ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                            ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                            ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                            ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                            ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定", on_click=lambda e: page.open(privacy_setting_dialog), icon_color=ft.Colors.WHITE, icon_size=26),
+                            ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300, icon_size=26)
+                        ],
+                        wrap=True, spacing=8, run_spacing=5, alignment=ft.MainAxisAlignment.START
+                    )
+                ]),
+                padding=12, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10, border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
+            ),
+        ], 
+        scroll=ft.ScrollMode.AUTO
+    )
 
-    # ⭕ 修正後:ListViewが中でexpandしているため、親のColumnのスクロールは不要（競合エラーを回避）
     ranking_tab_view = ft.Column(
         controls=[
             ft.Container(
@@ -978,29 +964,22 @@ def main(page: ft.Page):
                     ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
                     ranking_group_dropdown
                 ],
-                    wrap=True,
-                    spacing=10,
-                    run_spacing=10,
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    wrap=True, spacing=10, run_spacing=10, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=15
             ),
-            ft.Container(content=ranking_list, expand=True)
-        ], 
-        expand=True  # 💡 scrollプロパティを完全に削除しました
+            ft.Container(content=ranking_list, height=450) # 💡 ListViewを格納するContainerに明確な高さ(450)を指定！
+        ]
     )
 
-
-    main_tab_view = ft.Tabs(
+     main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
         tabs=[
-            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=ft.Container(content=calc_tab_view, expand=True)),
-            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=ft.Container(content=mypage_tab_view, expand=True)),
-            # 💡 修正のコア：ranking_tab_view を確実に描画させるため Container で包み込む！
-            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ft.Container(content=ranking_tab_view, expand=True))
+            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
+            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
         ],
-        expand=True,
+        expand=True, # 💡 一番外側のTabsだけがexpand=Trueを持つのがFletの正しい構造です！
         on_change=lambda e: (
             refresh_ranking_dropdown_options(),
             update_ranking_ui() if main_tab_view.selected_index == 2 else None,
