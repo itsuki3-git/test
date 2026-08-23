@@ -78,7 +78,7 @@ def main(page: ft.Page):
     def show_alert(message, title="エラー"):
         alert_dialog = ft.AlertDialog(title=ft.Text(title), content=ft.Text(message))
         alert_dialog.actions = [
-            ft.TextButton("OK", on_click=lambda e: (setattr(alert_dialog, "open", False), page.update()))]
+            ft.TextButton("OK", on_click=lambda e: (page.close(alert_dialog)))]
         page.open(alert_dialog)
 
     def hash_password(password: str) -> str:
@@ -159,15 +159,15 @@ def main(page: ft.Page):
                      ft.Text(value=f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13,
                              color=ft.Colors.GREY_700),
                      ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True),
-                                                                                      ft.IconButton(
-                                                                                          icon=ft.Icons.DELETE_FOREVER,
-                                                                                          icon_color=ft.Colors.RED_600,
-                                                                                          on_click=lambda e, idx=record[
-                                                                                              "id"]: delete_saved_record(
-                                                                                              idx))],
-                                                                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                                             padding=12, border=ft.border.all(1, ft.Colors.BLUE_100),
-                                                             border_radius=8, bgcolor=ft.Colors.BLUE_50))
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_FOREVER,
+                        icon_color=ft.Colors.RED_600,
+                        on_click=lambda e, idx=record[
+                            "id"]: delete_saved_record(
+                            idx))],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    padding=12, border=ft.border.all(1, ft.Colors.BLUE_100),
+                    border_radius=8, bgcolor=ft.Colors.BLUE_50))
         page.update()
 
     def update_ranking_ui():
@@ -209,8 +209,15 @@ def main(page: ft.Page):
                            r["player"] not in hidden_users and r["player"] in same_group_users]
         if not visible_records:
             ranking_list.controls.append(
-                ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500,
-                        text_align=ft.TextAlign.CENTER))
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.LEADERBOARD_OUTLINED, size=50, color=ft.Colors.GREY_400),
+                        ft.Text("このグループに公開されている記録はありません", color=ft.Colors.GREY_600, size=15),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    alignment=ft.alignment.center,
+                    padding=30
+                )
+            )
         else:
             user_best_records = {}
             for r in visible_records:
@@ -255,7 +262,8 @@ def main(page: ft.Page):
                 {"player": current_player, "final_score": total_score, "apple": counts["apple"],
                  "orange": counts["orange"], "grape": counts["grape"], "date": get_jst_now_str()}).execute()
         except Exception as ex:
-            show_alert(f"記録保存失敗: {ex}"); return
+            show_alert(f"記録保存失敗: {ex}");
+            return
         reset_current_game(None)
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
@@ -721,7 +729,8 @@ def main(page: ft.Page):
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     secret_question_dialog = ft.AlertDialog(title=ft.Text("🛡️ 秘密の質問の設定"), content=ft.Container(
         content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140),
-                                            actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(secret_question_dialog)),
+                                            actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(
+                                                secret_question_dialog)),
                                                      ft.ElevatedButton("設定を保存",
                                                                        on_click=handle_save_secret_question,
                                                                        bgcolor=ft.Colors.BLUE_600,
@@ -734,14 +743,13 @@ def main(page: ft.Page):
         ft.ElevatedButton("閉じる", on_click=lambda e: page.close(privacy_setting_dialog),
                           bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
                                             actions_alignment=ft.MainAxisAlignment.END)
-    
-    # ─── 修正：アカウント削除確認を1行化 ───
+
     confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text(
         "本当にアカウントを削除しますか？"), actions=[
         ft.TextButton("キャンセル", on_click=lambda e: page.close(confirm_delete_dialog)),
         ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600),
                       on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
-    
+
     forgot_dialog = ft.AlertDialog(title=ft.Text("🔑 パスワードの再設定"), content=ft.Container(content=ft.Column(
         [forgot_name_input,
          ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600,
@@ -803,10 +811,10 @@ def main(page: ft.Page):
                                                     setattr(forgot_answer_input, "value", ""),
                                                     setattr(forgot_new_pass_input, "value", ""),
                                                     setattr(forgot_question_text, "value",
-                                                            "プレイヤー名を入力して「質問を確認」を押してください"),
-                                                    page.open(forgot_dialog)))],
+                                                            "プレイヤー名を入力して「質問を確認」を押してください",
+                                                    page.open(forgot_dialog))))],
         alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                              padding=20, alignment=ft.alignment.center, expand=True, visible=True)
+        padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display],
@@ -824,7 +832,7 @@ def main(page: ft.Page):
                               style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
             ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game,
                               bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
-                                    alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
+            alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
 
     mypage_tab_view = ft.Column(controls=[
@@ -922,5 +930,6 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     import os
+
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
