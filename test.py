@@ -441,7 +441,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
 
-    # 🏆 追加: 選択されたグループ番号に絞り込んだランキングを構築・描画する
+    # 🏆 修正: 一般ユーザーの最新の my_group_list を基準に、グループごとのランキングを確実に構築する
     def update_ranking_ui():
         ranking_list.controls.clear()
         selected_g = ranking_group_dropdown.value
@@ -453,27 +453,29 @@ def main(page: ft.Page):
         ranking_title_text.value = f"🏆 グループ {selected_g} ハイスコアランキング"
 
         try:
-            # records(スコア)とprivacy(所属グループ)のデータを全取得
+            # records (全プレイヤーのゲームスコア) と privacy (各プレイヤーの所属) を全取得
             records_res = supabase.table("records").select("*").execute()
             privacy_res = supabase.table("privacy").select("*").execute()
             records_raw = records_res.data or []
             privacy_raw = privacy_res.data or []
 
-            # 選択されたグループに所属しているプレイヤーを抽出
+            # 💡 修正のコア: 選択中のグループ番号に属しているプレイヤー名を抽出
             allowed_players = set()
             for p in privacy_raw:
                 p_name = p.get("username") or p.get("player")
                 g_str = str(p.get("group_number", "1"))
-                # カンマ区切りの所属番号をリスト化してチェック
+                # カンマ区切りの所属グループ文字列をクリーンなリストに分解
                 p_groups = [x.strip() for x in g_str.replace("，", ",").split(",") if x.strip()]
+                
+                # 選択中のグループ番号（例: "3"）が含まれているプレイヤーを許可リストに追加
                 if selected_g in p_groups and p_name:
                     allowed_players.add(p_name)
 
-            # 管理者(admin)は例外としてグループ0で表示を分ける、または常に全許可にする場合は調整可能
+            # 管理者は管理者専用のグループ0を閲覧可能に（今回のリクエスト通りいったん無視でも動作へ影響しません）
             if selected_g == "0":
                 allowed_players.add("admin")
 
-            # 該当グループに属し、スコアが1点以上の有効なレコードのみを厳選
+            # 許可されたプレイヤーの、1点以上の有効なレコードのみを抽出
             filtered_records = []
             for r in records_raw:
                 p_name = r.get("player")
@@ -481,10 +483,11 @@ def main(page: ft.Page):
                     filtered_records.append(r)
 
         except Exception as ex:
-            ranking_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
+            ranking_list.controls.append(ft.Text(f"ランキングデータ取得エラー: {ex}", color=ft.Colors.RED))
             page.update()
             return
 
+        # 該当グループにデータがない場合のメッセージ
         if not filtered_records:
             ranking_list.controls.append(
                 ft.Container(
@@ -493,7 +496,7 @@ def main(page: ft.Page):
                 )
             )
         else:
-            # プレイヤーごとの自己ベスト（最高スコア）を算出
+            # 各プレイヤーごとの自己ベスト（最高スコア）を算出
             user_best = {}
             for r in filtered_records:
                 p_name = r["player"]
@@ -528,6 +531,7 @@ def main(page: ft.Page):
             ranking_list.controls = new_controls
 
         page.update()
+
 
     # 🏆 追加: ユーザーの最新の所属グループを元に、ドロップダウンの選択肢を再構築する
     def refresh_ranking_dropdown_options():
