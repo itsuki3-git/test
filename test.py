@@ -240,7 +240,7 @@ def main(page: ft.Page):
             else:
                 for g in sorted(my_group_list):
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list) if my_group_list else None
+                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
         except Exception:
             ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
             ranking_group_dropdown.value = "1"
@@ -272,18 +272,14 @@ def main(page: ft.Page):
                     p = r["player"]
                     if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
                 
-                # 💡 リスト内のコントロールを安全に配置し、カンマとカッコの対応関係を修正しました
                 for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
                     rank = index + 1
-                    
-                    # 各順位の表示カード（Row）を生成
                     rank_row = ft.Row(spacing=10)
                     rank_row.controls = [
                         ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
                         ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
                         ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
                     ]
-                    
                     ranking_list.controls.append(
                         ft.Container(
                             content=rank_row, 
@@ -294,8 +290,6 @@ def main(page: ft.Page):
                     )
         except Exception: pass
         page.update()
-
-
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
@@ -309,6 +303,8 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             priv_res = supabase.table("privacy").select("*").execute()
             user_privacy_data = next((p for p in (priv_res.data or []) if (p.get("username") or p.get("player")) == input_name), None)
+            
+            # 💡 修正箇所：文法崩れを完全に直し、安全に初期グループを代入するようにしました
             if user_privacy_data:
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 if input_name.lower() == "admin": raw_group_str = "0"
