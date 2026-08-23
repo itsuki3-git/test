@@ -55,15 +55,17 @@ def main(page: ft.Page):
     # 各要素の入力数値を画面中央にリアルタイム同期するTextマップ
     ui_text_map = {k: ft.Text(value="2" if k == "family" else "0", size=16, weight=ft.FontWeight.BOLD, width=30, text_align=ft.TextAlign.CENTER) for k in counts}
 
-    # 🌾 部屋のタイプを選択するトグルボタン（セグメントボタン）
+    # 🌾 修正: show_selected_icon=False を追加してチェックマークを非表示にしました
     room_type_switch = ft.SegmentedButton(
         selected={"clay"},
+        show_selected_icon=False, # 💡 ここを追加してチェック（✓）を消しました
         segments=[
             ft.Segment(value="clay", label=ft.Text("レンガ", size=12)),
             ft.Segment(value="stone", label=ft.Text("石", size=12)),
         ],
         on_change=lambda e: handle_room_type_change(e)
     )
+
 
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     group_inputs_container = ft.Column(spacing=10)
