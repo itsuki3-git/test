@@ -752,6 +752,7 @@ def main(page: ft.Page):
                        ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
+    authenticated_view = None
     # ─── 各種ダイアログの定義 ───
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
         content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[
@@ -954,23 +955,30 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO
     )
 
-    # 🏆 修正: ランキングタブを3つ目に追加し、on_changeで表示を更新
     main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
         tabs=[
             ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
             ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
-            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view), # 💡 ここを追加
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view),
         ],
         expand=True,
         on_change=lambda e: (
-            # ランキングタブ(インデックス2)が開かれたら最新状態に更新する
             (refresh_ranking_dropdown_options(), update_ranking_ui()) if main_tab_view.selected_index == 2 else None,
             page.update()
         )
     )
 
+    # ⭕ 修正: もともと「authenticated_view = ...」だった部分を再代入形式にしてエラーを回避
+    authenticated_view = ft.Column(
+        controls=[
+            global_header_bar,
+            main_tab_view
+        ],
+        expand=True,
+        visible=False
+    )
 
     page.controls.clear()
     page.add(login_view, authenticated_view)
