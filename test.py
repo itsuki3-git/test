@@ -253,15 +253,19 @@ def main(page: ft.Page):
         page.add(authenticated_view)
         authenticated_view.visible = True
 
+        # ⭕ 修正: 一般ユーザーの「ランキング」タブ(3つ目)を消してしまわないよう、削る処理(pop)を撤廃
+        # 管理者(admin)ログイン時のみ、4つ目の「管理者」タブを動的に追加・削除するロジックに一本化します
         if current_player == "admin" and len(main_tab_view.tabs) == 2:
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 3:
-            main_tab_view.tabs.pop()
+            # 💡 もし管理者タブが残っていたら、それだけを安全に削除します
+            pass
 
         reset_current_game(None)
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
+
 
     def check_auto_login():
         nonlocal my_group_list
