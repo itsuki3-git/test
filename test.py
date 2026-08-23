@@ -260,8 +260,10 @@ def main(page: ft.Page):
             for p in privacy_raw:
                 p_name = p.get("username") or p.get("player")
                 p_groups = [x.strip() for x in str(p.get("group_number", "1")).replace("，", ",").split(",") if x.strip()]
-                if selected_g in p_groups and p_name: allowed_players.add(p_name)
-            if selected_g == "0" or current_player == "admin": allowed_players.add("admin")
+                if selected_g in p_groups and p_name: 
+                    allowed_players.add(p_name)
+            if selected_g == "0" or current_player == "admin": 
+                allowed_players.add("admin")
             filtered = [r for r in records_raw if r.get("player") in allowed_players]
             
             if not filtered:
@@ -270,19 +272,19 @@ def main(page: ft.Page):
                 user_best = {}
                 for r in filtered:
                     p = r["player"]
-                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
-                # 1. メダルの文字を判定
-                medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
+                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: 
+                        user_best[p] = r
+                
                 for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
                     rank = index + 1
+                    
+                    # 💡 メダルの文字を判定する辞書
+                    medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
+                    
                     rank_row = ft.Row(spacing=10)
                     rank_row.controls = [
-                        ft.Text(
-                            f"{medal} {rank}位", 
-                            size=16, 
-                            weight=ft.FontWeight.BOLD, 
-                            width=60
-                        ),
+                        # 💡 綺麗に直していただいた形式でテキストを表示
+                        ft.Text(f"{medal} {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
                         ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
                         ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
                     ]
@@ -294,8 +296,10 @@ def main(page: ft.Page):
                             border_radius=8
                         )
                     )
-        except Exception: pass
+        except Exception: 
+            pass
         page.update()
+
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
@@ -397,8 +401,83 @@ def main(page: ft.Page):
     def handle_new_register(e): pass
     def execute_delete_account(): pass
     def handle_admin_table_sort(e): pass
-    def update_admin_ui(): pass
     def check_auto_login(): pass
+
+    # ⭕ 修正: 消えてしまっていた管理者タブのデータ表(DataTable)の描画ロジックをアグリコラ仕様で完全復活させます
+    def update_admin_ui():
+        if current_player != "admin": return
+        admin_data_table.rows.clear()
+        try:
+            # データベース（Supabase）からユーザー一覧、所属、ゲームスコアを全取得
+            users_res = supabase.table("users").select("username").execute()
+            privacy_res = supabase.table("privacy").select("*").execute()
+            records_res = supabase.table("records").select("*").execute()
+            all_users = users_res.data or []
+            all_privacy = privacy_res.data or []
+            all_records = records_res.data or []
+
+            # ユーザー名と所属グループ番号の紐付けマップを作成
+            group_map = {}
+            for p in all_privacy:
+                p_name = p.get("username") or p.get("player")
+                if p_name:
+                    group_map[p_name] = str(p.get("group_number", "1"))
+
+            summary_data = []
+
+            # 検索キーワードが入力されている場合はフィルタリング
+            try:
+                search_keyword = admin_search_input.value.strip().lower()
+            except Exception:
+                search_keyword = ""
+
+            # 各ユーザーごとのゲーム記録を集計
+            for u in all_users:
+                username = u["username"]
+                if search_keyword and search_keyword not in username.lower():
+                    continue
+
+                user_records = [r for r in all_records if r["player"] == username]
+                # 💡 アグリコラ仕様: フルーツの内訳は無視し、合計点(final_score)だけを安全に抽出
+                valid_scores = [r["final_score"] for r in user_records if r.get("final_score") is not None]
+                max_score = max(valid_scores) if valid_scores else 0
+                latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
+                user_group_str = group_map.get(username, "1")
+
+                summary_data.append({
+                    "username": username, 
+                    "group_str": user_group_str, 
+                    "max_score": max_score, 
+                    "latest_date": latest_date
+                })
+
+            # クリックされた列に応じたソート処理
+            if current_sort_column == 0:
+                summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
+            elif current_sort_column == 1:
+                summary_data.sort(key=lambda x: x["group_str"], reverse=not current_sort_ascending)
+            elif current_sort_column == 2:
+                summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
+            elif current_sort_column == 3:
+                summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
+
+            # データテーブルの行(DataRow)を組み立てて画面に流し込む
+            for data in summary_data:
+                is_admin = (data["username"].lower() == "admin")
+                name_display = f"👑 {data['username']}" if is_admin else data["username"]
+                admin_data_table.rows.append(
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text(name_display, width=100, weight=ft.FontWeight.BOLD if is_admin else ft.FontWeight.NORMAL, color=ft.Colors.BLUE_600 if is_admin else ft.Colors.BLACK)),
+                        ft.DataCell(ft.Text(data["group_str"], width=80)),
+                        ft.DataCell(ft.Text(data["latest_date"], width=150, size=12)),
+                        ft.DataCell(ft.Text(f"{data['max_score']}点", width=80, weight=ft.FontWeight.W_500, color=ft.Colors.BLUE_700)),
+                    ])
+                )
+        except Exception as ex:
+            admin_data_table.rows.append(ft.DataRow(
+                cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
+        page.update()
+
 
     # ─── 各種ダイアログの定義 ───
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
