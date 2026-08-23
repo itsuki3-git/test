@@ -232,9 +232,7 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
             mypage_old_pass.value = ""
             mypage_new_pass.value = ""
-            # 💡【0.28.3対応】非推奨警告が出ない安全なダイアログクローズ
-            change_pass_dialog.open = False
-            page.update()
+            page.close(change_pass_dialog)
             show_alert("パスワードを変更しました！", title="成功")
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
@@ -251,8 +249,7 @@ def main(page: ft.Page):
             supabase.table("users").update({"secret_question": q, "secret_answer": hashed_answer}).eq("username",
                                                                                                       current_player).execute()
             mypage_answer_input.value = ""
-            secret_question_dialog.open = False
-            page.update()
+            page.close(secret_question_dialog)
             show_alert("秘密の質問と答えを保存しました！", title="成功")
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
@@ -268,8 +265,7 @@ def main(page: ft.Page):
             new_grp = int(grp_str)
             supabase.table("privacy").update({"group_number": new_grp}).eq("username", current_player).execute()
             current_group = new_grp
-            change_group_dialog.open = False
-            page.update()
+            page.close(change_group_dialog)
             update_all_uis()
             show_alert(f"所属グループを「グループ {current_group}」に変更しました！", title="成功")
         except Exception as ex:
@@ -299,7 +295,7 @@ def main(page: ft.Page):
             forgot_question_text.value = f"エラー: {ex}"
         page.update()
 
-    # --- パスワードリセット実行 ---
+    # --- パスワードリreset実行 ---
     def handle_forgot_reset_password(e):
         name = forgot_name_input.value.strip()
         ans = forgot_answer_input.value.strip()
@@ -327,7 +323,7 @@ def main(page: ft.Page):
             page.client_storage.remove(STORAGE_REMEMBER_PASS)
             login_name_input.value = ""
             login_pass_input.value = ""
-            forgot_dialog.open = False
+            page.close(forgot_dialog)
             login_view.visible = True
             authenticated_view.visible = False
             update_all_uis()
@@ -354,7 +350,7 @@ def main(page: ft.Page):
         current_player = new_name
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         update_all_uis()
-        change_name_dialog.open = False
+        page.close(change_name_dialog)
         page.overlay.append(ft.SnackBar(ft.Text("プレイヤー名を変更しました！"), open=True))
         page.update()
 
@@ -378,7 +374,7 @@ def main(page: ft.Page):
         page.client_storage.remove(STORAGE_REMEMBER_USER)
         page.client_storage.remove(STORAGE_REMEMBER_PASS)
         login_name_input.value, login_pass_input.value = "", ""
-        confirm_delete_dialog.open = False
+        page.close(confirm_delete_dialog)
         login_view.visible = True
         authenticated_view.visible = False
         update_all_uis()
@@ -451,7 +447,6 @@ def main(page: ft.Page):
     # --- 全体のランキング描画更新（グループ絞り込み対応） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
-        # 💡 ランキング上部のタイトルを、現在自分が所属しているグループ番号に自動更新します
         ranking_title_text.value = f"総合ハイスコアランキング (グループ {current_group})"
         try:
             privacy_res = supabase.table("privacy").select("*").execute()
@@ -460,7 +455,7 @@ def main(page: ft.Page):
             # 非表示設定のユーザーをリスト化
             hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
 
-            # 💡 自分と同じグループ番号に所属しているユーザー名だけを抽出します
+            # 自分と同じグループ番号に所属しているユーザー名だけを抽出します
             same_group_users = [p["username"] for p in privacy_list if p.get("group_number", 1) == current_group]
 
             records_res = supabase.table("records").select("*").execute()
@@ -470,7 +465,6 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # 💡 ランキングに表示する条件として「同じグループに所属するプレイヤー」の記録のみに厳格に絞り込みます
         visible_records = [r for r in all_records if
                            r["player"] not in hidden_users and r["player"] in same_group_users]
 
@@ -547,15 +541,9 @@ def main(page: ft.Page):
             return
         update_all_uis()
 
-    # =========================================================================
-    # 💡【第4分冊のすぐ後ろ】ここから下に隙間なく上書きしてください
-    # =========================================================================
-
-    # --- 1. 最初に関数やソート変数をすべて定義（順序バグを完全封殺） ---
     current_sort_column = 3
     current_sort_ascending = False
 
-    # 💡【復活・最重要】エラーの原因だった関数定義をここに確実に配置します
     def create_fruit_selector(label, fruit_key, count_text_component, color):
         return ft.Container(
             content=ft.Row(
@@ -574,7 +562,6 @@ def main(page: ft.Page):
             ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
         )
 
-    # 💡【管理者用機能】ヘッダーの列名クリック時に呼び出されるソートトリガー関数
     def handle_admin_table_sort(e):
         nonlocal current_sort_column, current_sort_ascending
         if current_sort_column == e.column_index:
@@ -586,7 +573,6 @@ def main(page: ft.Page):
         admin_data_table.sort_ascending = current_sort_ascending
         update_admin_ui()
 
-    # 💡【管理者用機能】データを表（テーブル）形式でリフレッシュして描画する処理
     def update_admin_ui():
         if current_player != "admin": return
         admin_data_table.rows.clear()
@@ -651,18 +637,17 @@ def main(page: ft.Page):
     # --- 2. 各種ダイアログや共通コンポーネントの設定（Flet 0.28.3仕様） ---
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
         content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_name_dialog, "open", False), page.update())),
+        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)),
         ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
                                         actions_alignment=ft.MainAxisAlignment.END)
     change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(
         content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_pass_dialog, "open", False), page.update())),
+        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_pass_dialog)),
         ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     secret_question_dialog = ft.AlertDialog(title=ft.Text("🛡️ 秘密の質問の設定"), content=ft.Container(
         content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140),
-                                            actions=[ft.TextButton("キャンセル", on_click=lambda e: (
-                                                setattr(secret_question_dialog, "open", False), page.update())),
+                                            actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(secret_question_dialog)),
                                                      ft.ElevatedButton("設定を保存",
                                                                        on_click=handle_save_secret_question,
                                                                        bgcolor=ft.Colors.BLUE_600,
@@ -672,12 +657,13 @@ def main(page: ft.Page):
         content=ft.Column(
             [ft.Text("スコアを全体のランキングに公開するかどうかを切り替えます。", size=14, color=ft.Colors.GREY_700),
              ft.Container(height=5), ranking_switch], spacing=10, tight=True), width=320, height=100), actions=[
-        ft.ElevatedButton("閉じる", on_click=lambda e: (setattr(privacy_setting_dialog, "open", False), page.update()),
+        ft.ElevatedButton("閉じる", on_click=lambda e: page.close(privacy_setting_dialog),
                           bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
                                             actions_alignment=ft.MainAxisAlignment.END)
     confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text(
-        "本当にアカウントを削除しますか？\n過去のゲーム記録もすべて消去され、元に戻すことはできません。"), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: (setattr(confirm_delete_dialog, "open", False), page.update())),
+        "本当にアカウントを削除しますか？
+過去のゲーム記録もすべて消去され、元に戻すことはできません。"), actions=[
+        ft.TextButton("キャンセル", on_click=lambda e: page.close(confirm_delete_dialog)),
         ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600),
                       on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
     forgot_dialog = ft.AlertDialog(title=ft.Text("🔑 パスワードの再設定"), content=ft.Container(content=ft.Column(
@@ -685,12 +671,12 @@ def main(page: ft.Page):
          ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600,
                            color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input,
          forgot_new_pass_input], spacing=10, tight=True), width=320, height=325), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: (setattr(forgot_dialog, "open", False), page.update())),
+        ft.TextButton("キャンセル", on_click=lambda e: page.close(forgot_dialog)),
         ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     change_group_dialog = ft.AlertDialog(title=ft.Text("🔢 グループ番号の変更"), content=ft.Container(
         content=ft.Column([mypage_group_input], spacing=10, tight=True), width=320, height=70), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: (setattr(change_group_dialog, "open", False), page.update())),
+        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_group_dialog)),
         ft.ElevatedButton("変更を保存", on_click=handle_save_group_number, bgcolor=ft.Colors.BLUE_600,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
 
@@ -721,7 +707,6 @@ def main(page: ft.Page):
         sort_column_index=3, sort_ascending=False, expand=True
     )
 
-    # --- 3. 各種表示レイアウトの構築 ---
     admin_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD,
@@ -743,11 +728,10 @@ def main(page: ft.Page):
                                                     setattr(forgot_new_pass_input, "value", ""),
                                                     setattr(forgot_question_text, "value",
                                                             "プレイヤー名を入力して「質問を確認」を押してください"),
-                                                    setattr(forgot_dialog, "open", True), page.update()))],
+                                                    page.open(forgot_dialog)))],
         alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
                               padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
-    # 💡 上方で定義された create_fruit_selector を安全に呼び出します
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display],
                                        alignment=ft.MainAxisAlignment.CENTER,
@@ -767,7 +751,6 @@ def main(page: ft.Page):
                                     alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
 
-    # 💡【Flet 0.28.3仕様】文字を白くくっきりさせ、スマホでもアイコンが美しく自動折り返し（wrap=True）するマイページ設定
     mypage_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Text("あなたの過去のゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
                                      color=ft.Colors.BLUE_GREY_700),
@@ -781,25 +764,25 @@ def main(page: ft.Page):
                 ft.Row(
                     controls=[
                         ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更",
-                                      on_click=lambda e: (setattr(change_name_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(change_name_dialog),
                                       icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更",
-                                      on_click=lambda e: (setattr(change_group_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(change_group_dialog),
                                       icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更",
-                                      on_click=lambda e: (setattr(change_pass_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(change_pass_dialog),
                                       icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定",
-                                      on_click=lambda e: (setattr(secret_question_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(secret_question_dialog),
                                       icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.VISIBILITY, tooltip="ランキング公開設定",
-                                      on_click=lambda e: (setattr(privacy_setting_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(privacy_setting_dialog),
                                       icon_color=ft.Colors.WHITE, icon_size=26),
                         ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除",
-                                      on_click=lambda e: (setattr(confirm_delete_dialog, "open", True), page.update()),
+                                      on_click=lambda e: page.open(confirm_delete_dialog),
                                       icon_color=ft.Colors.RED_300, icon_size=26)
                     ],
-                    wrap=True,  # 💡 画面幅に合わせて自動で美しく折り返すプロパティ
+                    wrap=True,
                     spacing=8,
                     run_spacing=5,
                     alignment=ft.MainAxisAlignment.START
