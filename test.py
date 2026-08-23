@@ -171,68 +171,60 @@ def main(page: ft.Page):
         page.update()
 
     def update_ranking_ui():
-        """二重登録の競合とcontrols.controlsの参照バグを修正した完全版"""
-        # 1. まずは中身を完全にクリア（Fletの安全なリセット）
-        ranking_list.controls = [] 
+        """グループ番号での絞り込みを完全に撤廃し、全員の総合ハイスコアランキングを確実に表示する関数"""
+        # 1. まず画面の表示エリアを完全にクリアしてリセット
+        ranking_list.controls = []
 
-        if str(active_ranking_group) == "0":
-            ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者専用)"
-        else:
-            ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+        # タイトルを全員向けにシンプルに変更
+        ranking_title_text.value = "🏆 総合ハイスコアランキング (全員表示)"
 
         try:
-            privacy_res = supabase.table("privacy").select("*").execute()
-            privacy_list = privacy_res.data or []
-
-            try:
-                target_g = int(active_ranking_group)
-            except Exception:
-                target_g = 1
-
-            same_group_users = []
-            for p in privacy_list:
-                p_name = p.get("username") or p.get("player")
-                if not p_name:
-                    continue
-                raw_g_str = str(p.get("group_number", "1"))
-                user_g_list = [int(t.strip()) for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip()).isdigit()]
-
-                if target_g in user_g_list:
-                    same_group_users.append(p_name)
-
+            # 2. records テーブルからスコアデータを全取得
             records_res = supabase.table("records").select("*").execute()
-            all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
+            records_raw = records_res.data or []
+            
+            # スコアが存在し、かつプレイヤー名がしっかりと入っているレコードのみを厳選
+            all_records = []
+            for r in records_raw:
+                if isinstance(r, dict) and r.get("player") and r.get("final_score", 0) > 0:
+                    all_records.append(r)
+
         except Exception as ex:
-            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            ranking_list.controls.append(ft.Text(f"ランキングデータ取得エラー: {ex}", color=ft.Colors.RED))
             page.update()
             return
 
-        visible_records = [r for r in all_records if r["player"] in same_group_users]
-        
-        # 新しい子部品を一時的に格納するための安全なリスト（器）を用意
-        new_controls = []
+        # 💡 グループ絞り込み判定（same_group_users）を完全に撤廃！
+        # 取得できたすべての公開・有効なレコードをそのまま表示対象にします
+        visible_records = all_records
 
+        # 💡 表示できるスコアデータが1件もない場合のメッセージ対応
         if not visible_records:
-            # 💡 データがない場合の案内を一時リストに追加
-            new_controls.append(
+            ranking_list.controls.append(
                 ft.Container(
                     content=ft.Column([
                         ft.Icon(ft.Icons.LEADERBOARD_OUTLINED, size=40, color=ft.Colors.GREY_400),
-                        ft.Text("このグループに公開されている記録はありません", color=ft.Colors.GREY_500, size=14),
+                        ft.Text("保存されているゲーム記録がまだありません", color=ft.Colors.GREY_500, size=14),
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     alignment=ft.alignment.center,
                     padding=30
                 )
             )
         else:
+            # 各プレイヤーごとの自己ベスト（最高スコア）を算出
             user_best_records = {}
             for r in visible_records:
                 p_name = r["player"]
                 if p_name not in user_best_records or r["final_score"] > user_best_records[p_name]["final_score"]:
                     user_best_records[p_name] = r
 
+            # スコアの高い順に並び替え（降順ソート）
             sorted_records = sorted(list(user_best_records.values()), key=lambda x: x["final_score"], reverse=True)
 
+            # 画面に追加するための新しいコンポーネント用一時リスト
+            new_controls = []
+
+            # ランキングUIカードを生成してリストへ格納
             for index, record in enumerate(sorted_records):
                 rank = index + 1
                 rank_color = ft.Colors.AMBER_500 if rank == 1 else (ft.Colors.BLUE_GREY_300 if rank == 2 else (
@@ -240,7 +232,6 @@ def main(page: ft.Page):
                 rank_text = f"🥇 {rank}位" if rank == 1 else (
                     f"🥈 {rank}位" if rank == 2 else (f"🥉 {rank}位" if rank == 3 else f"  {rank}位"))
                 
-                # 💡 修正のコア：直接appendするのではなく、用意した一時リストへ安全にカードを追加していく
                 new_controls.append(
                     ft.Container(
                         content=ft.Row(
@@ -255,10 +246,13 @@ def main(page: ft.Page):
                         ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
                     )
                 )
-        
-        # 💡 最後に、作成したカードのリストを `ranking_list.controls` に一括代入して画面を更新する
-        ranking_list.controls = new_controls
+            
+            # 作成したランキング要素を一気に流し込む
+            ranking_list.controls = new_controls
+            
+        # 何が起きても必ず最後に画面を更新して再描画を確定させる
         page.update()
+
 
     def save_current_game(e):
         if not current_player: return
