@@ -144,34 +144,32 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column([ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700), ft.Text(value=f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700), ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True), ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
         page.update()
 
-    # --- 1. 全体のランキング描画更新（画面を開くたびに最新データを完全フルスキャン） ---
+    # --- 1. 全体のランキング描画更新（画面サイズ潰れ ＆ 型不整合を完全修復） ---
     def update_ranking_ui():
         ranking_list.controls.clear()
         
-        # 💡 表示文言のグループ0番および通常番号対応
-        if str(active_ranking_group) == "0":
+        # 💡 型バグを防ぐため、安全に文字列に変換して比較
+        current_g_str = str(active_ranking_group).strip()
+        if current_g_str == "0":
             ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者専用)"
         else:
-            ranking_title_text.value = f"総合ハイスコアランキング (グループ {active_ranking_group})"
+            ranking_title_text.value = f"総合ハイスコアランキング (グループ {current_g_str})"
             
         try:
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
             hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
             
-            # 各個人のカンマ区切り文字列を分解し、現在ドロップダウンで選択中のグループに含まれているユーザーを抽出
+            # 各個人のカンマ区切り文字列を分解し、現在選択中のグループに含まれているユーザーを抽出
             same_group_users = []
             for p in privacy_list:
                 user_name = p.get("username")
                 raw_g_str = str(p.get("group_number", "1"))
-                user_g_list = [int(t.strip()) for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip()).isdigit()]
                 
-                try:
-                    target_g = int(active_ranking_group)
-                except Exception:
-                    target_g = 1
-                    
-                if target_g in user_g_list: 
+                # 💡 すべて文字列のリストに統一して比較することで、型エラーを100%回避
+                user_g_list = [t.strip() for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip())]
+                
+                if current_g_str in user_g_list: 
                     same_group_users.append(user_name)
             
             records_res = supabase.table("records").select("*").execute()
@@ -185,7 +183,7 @@ def main(page: ft.Page):
         if not visible_records:
             ranking_list.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
-            # 💡【バグ修正】千切れていた user_best_records の変数名を完全に正しい形に修復
+            # 各プレイヤーの最高得点レコードを重複なく抽出
             user_best_records = {}
             for r in visible_records:
                 p_name = r["player"]
@@ -229,7 +227,7 @@ def main(page: ft.Page):
         except Exception: return
         update_all_uis()
 
-    # --- 2. 表示グループ同期ロジック（自由設定対応 ＆ 強制再集計仕様） ---
+    # --- 2. 表示グループ同期ロジック（自由設定・リアルタイム自動スキャン対応） ---
     def refresh_ranking_dropdown_options():
         current_value = ranking_group_dropdown.value
         ranking_group_dropdown.options.clear()
@@ -237,7 +235,7 @@ def main(page: ft.Page):
         if current_player == "admin":
             try:
                 all_priv = supabase.table("privacy").select("group_number").execute()
-                detected_groups = {0} 
+                detected_groups = {0}
                 
                 if all_priv.data:
                     for row in all_priv.data:
@@ -259,7 +257,7 @@ def main(page: ft.Page):
         if current_value and any(opt.key == current_value for opt in ranking_group_dropdown.options):
             ranking_group_dropdown.value = current_value
         else:
-            ranking_group_dropdown.value = "0" if current_player == "admin" else (str(my_group_list) if my_group_list else "1")
+            ranking_group_dropdown.value = "0" if current_player == "admin" else (str(my_group_list[0]) if my_group_list else "1")
             
         page.update()
 
@@ -267,6 +265,32 @@ def main(page: ft.Page):
         nonlocal active_ranking_group
         active_ranking_group = e.control.value
         update_ranking_ui()
+
+    # 💡【重要：サイズ潰れバグを100%解決するレイアウト構造】
+    # 外枠を確実に ft.Container(expand=True) で覆い、内部の Column のサイズ無限ループを完全にシャットアウトします
+    ranking_tab_view = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Row([
+                        ft.Container(content=ranking_title_text, expand=True),
+                        ranking_group_dropdown
+                    ],
+                    wrap=True,                     
+                    spacing=10,                    
+                    run_spacing=10,                
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=15
+                ),
+                # 💡 スクロールは全体のColumnではなく、一覧リスト（ListView）側に任せることで絶対フリーズを防ぎます
+                ft.Container(content=ranking_list, expand=True)
+            ],
+            spacing=0
+        ),
+        expand=True # 💡 これによりTabsの全領域に100%引き伸ばされます
+    )
+
 
     # --- 2. 既存ユーザーのログイン処理 ---
     def handle_existing_login(e):
