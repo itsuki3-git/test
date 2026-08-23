@@ -271,13 +271,14 @@ def main(page: ft.Page):
                 for r in filtered:
                     p = r["player"]
                     if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
-                
+                # 1. メダルの文字を判定
+                medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
                 for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
                     rank = index + 1
                     rank_row = ft.Row(spacing=10)
                     rank_row.controls = [
                         ft.Text(
-                            f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", 
+                            f"{medal} {rank}位", 
                             size=16, 
                             weight=ft.FontWeight.BOLD, 
                             width=60
