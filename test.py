@@ -403,6 +403,21 @@ def main(page: ft.Page):
     def handle_admin_table_sort(e): pass
     def check_auto_login(): pass
 
+    # ⭕ 修正: 管理者タブの並び替え(ソート)に必要な変数と関数を完全復旧させます
+    current_sort_column = 3
+    current_sort_ascending = False
+
+    def handle_admin_table_sort(e):
+        nonlocal current_sort_column, current_sort_ascending
+        if current_sort_column == e.column_index:
+            current_sort_ascending = not current_sort_ascending
+        else:
+            current_sort_column = e.column_index
+            current_sort_ascending = True
+        admin_data_table.sort_column_index = current_sort_column
+        admin_data_table.sort_ascending = current_sort_ascending
+        update_admin_ui()
+
     # ⭕ 修正: 消えてしまっていた管理者タブのデータ表(DataTable)の描画ロジックをアグリコラ仕様で完全復活させます
     def update_admin_ui():
         if current_player != "admin": return
