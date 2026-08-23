@@ -241,7 +241,6 @@ def main(page: ft.Page):
                     for row in all_priv.data:
                         raw_val = row.get("group_number")
                         if raw_val:
-                            # 一般プレイヤーが自由に追加した数字をすべて残さず自動抽出
                             for token in str(raw_val).replace("，", ",").split(","):
                                 if (t := token.strip()).isdigit():
                                     detected_groups.add(int(t))
@@ -289,7 +288,7 @@ def main(page: ft.Page):
 
             priv_res = supabase.table("privacy").select("is_visible", "group_number").eq("username", input_name).execute()
             if priv_res.data and len(priv_res.data) > 0:
-                user_privacy_data = priv_res.data[0]
+                user_privacy_data = priv_res.data[0] # 💡先頭の辞書を安全に取得
                 ranking_switch.value = user_privacy_data.get("is_visible", True)
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 
@@ -312,6 +311,7 @@ def main(page: ft.Page):
                     my_group_list = [1]
                     supabase.table("privacy").insert({"username": input_name, "is_visible": True, "group_number": "1"}).execute()
             
+            # 💡【重要バグ修正】カッコ付きの不正文字列にならないよう、純粋な単一の数字文字列を代入
             if input_name.lower() == "admin":
                 active_ranking_group = "0"  
             else:
@@ -418,6 +418,7 @@ def main(page: ft.Page):
                         else:
                             my_group_list = [1]
                         
+                    # 💡 自動ログイン時もカッコのない純粋な文字列型に修正
                     if saved_user.lower() == "admin":
                         active_ranking_group = "0"
                     else:
