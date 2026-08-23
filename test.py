@@ -28,7 +28,7 @@ def main(page: ft.Page):
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
     STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
-    # --- UIコンポーネント定義 ---
+    # --- UIコンポーネントの基本定義 ---
     login_name_input = ft.TextField(label="プレイヤー名", hint_text="例: たろう")
     login_pass_input = ft.TextField(label="パスワード", password=True, can_reveal_password=True)
 
@@ -50,8 +50,9 @@ def main(page: ft.Page):
     grape_count_text = ft.Text(value="0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER)
 
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
-    mypage_group_input = ft.TextField(label="所属グループ番号 (複数時はカンマ区切り)", hint_text="例: 1, 3, 5",
-                                      expand=True)
+
+    # 🔹 グループ動的入力用の縦並びコンテナ
+    group_inputs_container = ft.Column(spacing=10)
 
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
 
@@ -164,7 +165,7 @@ def main(page: ft.Page):
                 {"player": current_player, "final_score": total_score, "apple": counts["apple"],
                  "orange": counts["orange"], "grape": counts["grape"], "date": get_jst_now_str()}).execute()
         except Exception as ex:
-            show_alert(f"記録保存失敗: {ex}");
+            show_alert(f"記録保存失敗: {ex}")
             return
         reset_current_game(None)
         update_all_uis()
@@ -213,8 +214,6 @@ def main(page: ft.Page):
                     p_key = "username" if "username" in user_privacy_data else "player"
                     supabase.table("privacy").update({"group_number": "0"}).eq(p_key, "admin").execute()
 
-                mypage_group_input.value = raw_group_str
-
                 my_group_list = []
                 for x in raw_group_str.replace("，", ",").split(","):
                     if (x_strip := x.strip()).isdigit():
@@ -224,13 +223,10 @@ def main(page: ft.Page):
             else:
                 if input_name.lower() == "admin":
                     my_group_list = [0]
-                    mypage_group_input.value = "0"
                     supabase.table("privacy").insert(
                         {"username": "admin", "is_visible": True, "group_number": "0"}).execute()
                 else:
                     my_group_list = [1]
-                    mypage_group_input.value = "1"
-
         except Exception as ex:
             show_alert(f"ログインエラー: {ex}")
             return
@@ -290,8 +286,6 @@ def main(page: ft.Page):
                             p_key = "username" if "username" in user_privacy_data else "player"
                             supabase.table("privacy").update({"group_number": "0"}).eq(p_key, "admin").execute()
 
-                        mypage_group_input.value = raw_group_str
-
                         my_group_list = []
                         for x in raw_group_str.replace("，", ",").split(","):
                             if (x_strip := x.strip()).isdigit():
@@ -301,10 +295,8 @@ def main(page: ft.Page):
                     else:
                         if saved_user.lower() == "admin":
                             my_group_list = [0]
-                            mypage_group_input.value = "0"
                         else:
                             my_group_list = [1]
-                            mypage_group_input.value = "1"
 
                     enter_game_session(saved_user, f"🚀 おかえりなさい！ {saved_user} さん")
             except Exception:
@@ -364,33 +356,72 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"保存失敗: {ex}")
 
+    # 🔹 グループ動的追加・削除ロジック
+    def create_group_input_row(initial_value=""):
+        tf = ft.TextField(
+            value=str(initial_value),
+            label="グループ番号",
+            hint_text="数字を入力",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            expand=True
+        )
+        row = ft.Row(spacing=5)
+        row.controls = [
+            tf,
+            ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINED,
+                icon_color=ft.Colors.RED_400,
+                on_click=lambda e: remove_group_input_row(row)
+            )
+        ]
+        return row
+
+    def remove_group_input_row(row_control):
+        if len(group_inputs_container.controls) <= 1:
+            show_alert("少なくとも1つのグループに所属する必要があります。")
+            return
+        group_inputs_container.controls.remove(row_control)
+        page.update()
+
+    def add_blank_group_input_row(e):
+        group_inputs_container.controls.append(create_group_input_row(""))
+        page.update()
+
+    def open_change_group_dialog(e):
+        group_inputs_container.controls.clear()
+        for g_num in my_group_list:
+            group_inputs_container.controls.append(create_group_input_row(g_num))
+        if not group_inputs_container.controls:
+            group_inputs_container.controls.append(create_group_input_row("1"))
+        page.open(change_group_dialog)
+
     def handle_save_group_number(e):
         nonlocal my_group_list
-        grp_str = mypage_group_input.value.strip()
-        if not grp_str:
-            show_alert("グループ番号を入力してください。")
-            return
-
         parsed_list = []
-        for x in grp_str.replace("，", ",").split(","):
-            x_strip = x.strip()
-            if x_strip:
-                if not x_strip.isdigit():
-                    show_alert("グループ番号には半角数字とカンマのみを入力してください。")
-                    return
 
-                group_num = int(x_strip)
-                if current_player != "admin" and group_num == 0:
-                    show_alert("「グループ0」は管理者専用の所属枠です。他のグループ番号を設定してください。")
-                    return
+        for row in group_inputs_container.controls:
+            val_str = row.controls.value.strip()
+            if not val_str:
+                continue
 
+            if not val_str.isdigit():
+                show_alert("グループ番号には半角数字のみを入力してください。")
+                return
+
+            group_num = int(val_str)
+            if current_player != "admin" and group_num == 0:
+                show_alert("「グループ0」は管理者専用の所属枠です。")
+                return
+
+            if group_num not in parsed_list:
                 parsed_list.append(group_num)
 
         if not parsed_list:
-            show_alert("有効なグループ番号が見つかりませんでした。")
+            show_alert("有効なグループ番号を1つ以上入力してください。")
             return
 
         try:
+            parsed_list.sort()
             clean_str = ", ".join([str(n) for n in parsed_list])
 
             priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
@@ -398,7 +429,6 @@ def main(page: ft.Page):
 
             supabase.table("privacy").update({"group_number": clean_str}).eq(p_key, current_player).execute()
             my_group_list = parsed_list
-            mypage_group_input.value = clean_str
             page.close(change_group_dialog)
             update_all_uis()
             show_alert(f"所属グループを「{clean_str}」に変更しました！", title="成功")
@@ -607,7 +637,7 @@ def main(page: ft.Page):
                        ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
-    # ─── 各種ダイアログの定義（最新仕様 page.open に完全適合） ───
+    # ─── 各種ダイアログの定義 ───
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
         content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[
         ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)),
@@ -642,11 +672,32 @@ def main(page: ft.Page):
         ft.TextButton("キャンセル", on_click=lambda e: page.close(forgot_dialog)),
         ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
-    change_group_dialog = ft.AlertDialog(title=ft.Text("🔢 グループ番号の変更"), content=ft.Container(
-        content=ft.Column([mypage_group_input], spacing=10, tight=True), width=320, height=70), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_group_dialog)),
-        ft.ElevatedButton("変更を保存", on_click=handle_save_group_number, bgcolor=ft.Colors.BLUE_600,
-                          color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
+
+    # 🔹 修正: リスト型で追加・削除ができるグループ管理ダイアログ
+    change_group_dialog = ft.AlertDialog(
+        title=ft.Text("🔢 グループ番号の管理"),
+        content=ft.Container(
+            content=ft.ListView(
+                controls=[
+                    group_inputs_container,
+                    ft.TextButton(
+                        "＋ グループを追加",
+                        icon=ft.Icons.ADD,
+                        on_click=add_blank_group_input_row
+                    )
+                ],
+                spacing=10,
+            ),
+            width=320,
+            height=250
+        ),
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: page.close(change_group_dialog)),
+            ft.ElevatedButton("変更を保存", on_click=handle_save_group_number, bgcolor=ft.Colors.BLUE_600,
+                              color=ft.Colors.WHITE)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
 
     action_buttons_row = ft.ResponsiveRow(
         controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
@@ -727,7 +778,7 @@ def main(page: ft.Page):
             ft.Container(content=ft.Text("あなたの過去 of ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
                                          color=ft.Colors.BLUE_GREY_700),
                          padding=ft.padding.only(left=15, top=15, right=15)),
-            ft.Container(content=my_records_list, height=220),  # 💡 高さを固定して潰れを防止
+            ft.Container(content=my_records_list, height=220),
             ft.Container(height=5),
             ft.Container(
                 content=ft.Column([
@@ -738,8 +789,9 @@ def main(page: ft.Page):
                             ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更",
                                           on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE,
                                           icon_size=26),
+                            # 🔹 修正: リスト型で追加・削除ができる動的ダイアログを開くようイベントを差し替え
                             ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更",
-                                          on_click=lambda e: page.open(change_group_dialog), icon_color=ft.Colors.WHITE,
+                                          on_click=open_change_group_dialog, icon_color=ft.Colors.WHITE,
                                           icon_size=26),
                             ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更",
                                           on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE,
@@ -766,10 +818,9 @@ def main(page: ft.Page):
         animation_duration=300,
         tabs=[
             ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
-            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view)
+            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
         ],
         expand=True,
-        on_change=lambda e: page.update()
     )
 
     authenticated_view = ft.Column(
