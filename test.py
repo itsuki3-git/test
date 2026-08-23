@@ -270,14 +270,14 @@ def main(page: ft.Page):
                 for r in filtered:
                     p = r["player"]
                     if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
-                                for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
-                    rank = index + 1
-                    ranking_list.controls.append(ft.Container(content=ft.Row([
-                        # 💡 各項目の後ろにしっかりとカンマ「,」を配置して結合エラーを防ぎます
-                        ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
-                        ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD), # 👈 ここにカンマが必要です
-                        ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                    ]), padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8))
+                        for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
+                            rank = index + 1
+                            ranking_list.controls.append(ft.Container(content=ft.Row([
+                                # 💡 各項目の後ろにしっかりとカンマ「,」を配置して結合エラーを防ぎます
+                                ft.Text(f"🥇 {rank}位" if rank==1 else f"🥈 {rank}位" if rank==2 else f"🥉 {rank}位" else f"  {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
+                                ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD), # 👈 ここにカンマが必要です
+                                ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ]), padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8))
 
         except Exception: pass
         page.update()
