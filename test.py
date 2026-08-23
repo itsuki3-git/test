@@ -23,12 +23,14 @@ def main(page: ft.Page):
     current_player = None
     my_group_list = []
     
-    # 🌾 アグリコラ専用の数量データ（初期設定：家族2人、他は0）
+    # 🌾 修正: 部屋数の管理をタイプ(room_type)と個数(room_count)に集約
     counts = {
         "field": 0, "pasture": 0, "grain": 0, "vegetable": 0,
         "sheep": 0, "wild_boar": 0, "cattle": 0, "empty_space": 0,
-        "stable": 0, "clay_room": 0, "stone_room": 0, "family": 2,
-        "card_points": 0, "bonus_points": 0, "begging_card": 0
+        "stable": 0, 
+        "room_type": "clay", # 初期値はレンガ部屋（"clay" または "stone"）
+        "room_count": 0,     # 部屋の数
+        "family": 2, "card_points": 0, "bonus_points": 0, "begging_card": 0
     }
     
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
@@ -54,7 +56,16 @@ def main(page: ft.Page):
 
     # 🌾 各項目のカウンター用数値を画面に反映するTextコンポーネントマップ
     ui_text_map = {k: ft.Text(value="2" if k == "family" else "0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER) for k in counts}
+    room_type_switch = ft.SegmentedButton(
+        selected={"clay"},
+        segments=[
+            ft.Segment(value="clay", label=ft.Text("レンガ", size=12)),
+            ft.Segment(value="stone", label=ft.Text("石", size=12)),
+        ],
+        on_change=lambda e: handle_room_type_change(e)
+    )
 
+    
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     group_inputs_container = ft.Column(spacing=10)
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
@@ -157,9 +168,29 @@ def main(page: ft.Page):
             border_radius=10, 
             bgcolor=ft.Colors.WHITE
         )
+        
+    # 🌾 追加: 部屋専用の選択＆カウンターUI
+    def create_room_selector(color):
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    # 左側：部屋のタイプを選ぶトグルボタン
+                    ft.Container(content=room_type_switch, width=120, alignment=ft.alignment.center_left),
+                    # 右側：部屋数を入力する5連ボタン
+                    ft.Row(
+                        controls=[
+                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -3)), width=36, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -1)), width=36, alignment=ft.alignment.center),
+                            ft.Container(content=ui_text_map["room_count"], width=30, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 1)), width=36, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 3)), width=36, alignment=ft.alignment.center)
+                        ], spacing=0, alignment=ft.MainAxisAlignment.END
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ), padding=6, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+        )
 
-
-    # 🌾 アグリコラ公式ルールに基づく段階的な得点テーブル計算
+    # 🌾 修正: room_type に応じて1部屋あたりの点数を動的に切り替える
     def get_agricola_score(key, value):
         if key == "field":
             if value <= 1: return -1
@@ -205,18 +236,23 @@ def main(page: ft.Page):
             else: return 4
         elif key == "empty_space": return value * -1
         elif key == "stable": return value * 1
-        elif key == "clay_room": return value * 1
-        elif key == "stone_room": return value * 2
+        
+        # 💡 部屋数の計算ロジックを集約
+        elif key == "room_count":
+            multiplier = 2 if counts["room_type"] == "stone" else 1
+            return value * multiplier
+            
         elif key == "family": return value * 3
         elif key == "card_points": return value
         elif key == "bonus_points": return value
         elif key == "begging_card": return value * -3
         return 0
 
-    def calculate_total_score_ui_only():
-        total = sum(get_agricola_score(k, v) for k, v in counts.items())
-        score_display.value = str(total)
-        return total
+    # 🌾 追加: 部屋のタイプ（レンガ/石）が切り替わったときのイベント
+    def handle_room_type_change(e):
+        counts["room_type"] = list(e.selection)[0]
+        calculate_total_score_ui_only()
+        page.update()
 
     def adjust_count(key, delta):
         new_count = counts[key] + delta
@@ -228,8 +264,16 @@ def main(page: ft.Page):
 
     def reset_current_game(e):
         for k in counts:
-            counts[k] = 2 if k == "family" else 0
-            ui_text_map[k].value = "2" if k == "family" else "0"
+            if k == "family":
+                counts[k] = 2
+                ui_text_map[k].value = "2"
+            elif k == "room_type":
+                counts[k] = "clay"
+                room_type_switch.selected = {"clay"}
+            else:
+                counts[k] = 0
+                if k in ui_text_map:
+                    ui_text_map[k].value = "0"
         calculate_total_score_ui_only()
         if e: page.update()
 
@@ -683,13 +727,14 @@ def main(page: ft.Page):
                     create_agricola_selector("🐗 猪の頭数", "wild_boar", ft.Colors.BROWN_400),
                     create_agricola_selector("🐂 牛の頭数", "cattle", ft.Colors.BLUE_GREY_700),
                     
-                    # 💡 修正: 牛と未使用スペースの間に、グレーの区切り線（太さ1、上下余白10）を挿入しました
                     ft.Divider(height=20, thickness=1, color=ft.Colors.GREY_400),
                     
                     create_agricola_selector("❌ 未使用スペース (マイナス用)", "empty_space", ft.Colors.RED_400),
                     create_agricola_selector("🏠 柵の中の厩", "stable", ft.Colors.AMBER_800),
-                    create_agricola_selector("🧱 レンガの部屋数", "clay_room", ft.Colors.DEEP_ORANGE_400),
-                    create_agricola_selector("🪨 石の部屋数", "stone_room", ft.Colors.GREY_600),
+                    
+                    # 💡 修正: 2行あった部屋数を削除し、トグル選択付きの1行にスリム化
+                    create_room_selector(ft.Colors.DEEP_ORANGE_600),
+                    
                     create_agricola_selector("👨‍👩‍👧 家族の人数", "family", ft.Colors.BLUE_400),
                     create_agricola_selector("🃏 カードの得点 (進歩/職業)", "card_points", ft.Colors.PURPLE_400),
                     create_agricola_selector("🎁 各種ボーナス点", "bonus_points", ft.Colors.PINK_400),
