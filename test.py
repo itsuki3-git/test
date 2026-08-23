@@ -84,40 +84,46 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 🌾 アグリコラの要素セレクター（UI生成：-1、+1に加えて、一気に入力できる+3ボタンを追加）
+    # 🌾 アグリコラの要素セレクター（UI生成：-3, -1, 数量, +1, +3 の最強レイアウト）
     def create_agricola_selector(label, key, color):
         return ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text(label, size=16, weight=ft.FontWeight.W_500, expand=True),
+                    ft.Text(label, size=15, weight=ft.FontWeight.W_500, expand=True),
                     ft.Row(
                         controls=[
-                            # ➖ 1減らすボタン
-                            ft.IconButton(
-                                icon=ft.Icons.REMOVE_CIRCLE_OUTLINED, 
-                                icon_color=color, 
+                            # -3
+                            ft.TextButton(
+                                "-3", 
+                                style=ft.ButtonStyle(color=color), 
+                                on_click=lambda e: adjust_count(key, -3)
+                            ),
+                            # -1
+                            ft.TextButton(
+                                "-1", 
+                                style=ft.ButtonStyle(color=color), 
                                 on_click=lambda e: adjust_count(key, -1)
                             ),
-                            # 🔢 現在の値
+                            # 🔢 現在の値（中央）
                             ui_text_map[key],
-                            # ➕ 1増やすボタン（既存）
-                            ft.IconButton(
-                                icon=ft.Icons.PLUS_ONE, 
-                                icon_color=color, 
+                            # +1
+                            ft.TextButton(
+                                "+1", 
+                                style=ft.ButtonStyle(color=color), 
                                 on_click=lambda e: adjust_count(key, 1)
                             ),
-                            # 🚀 修正: お洒落なアイコンロゴ形式の「+3」ブーストボタン
-                            ft.IconButton(
-                                icon=ft.Icons.EXPOSURE_PLUS_3, # 💡 ここをお好みのアイコン名に変えられます
-                                icon_color=color,
-                                tooltip="一気に3つ追加",
+                            # 🚀 修正: 一気に3つ増やす「+3」の文字ボタンを追加
+                            ft.TextButton(
+                                "+3", 
+                                style=ft.ButtonStyle(color=color), 
                                 on_click=lambda e: adjust_count(key, 3)
                             )
-                        ], spacing=2
+                        ], spacing=0 # ボタンが横に広がって画面からはみ出さないよう隙間を詰めます
                     )
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            ), padding=10, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+            ), padding=8, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
         )
+
 
 
     # 🌾 アグリコラ公式ルールに基づく段階的な得点テーブル計算
