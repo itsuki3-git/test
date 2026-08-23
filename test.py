@@ -956,7 +956,7 @@ def main(page: ft.Page):
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
-        main_tab_view = ft.Tabs(
+    main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
         tabs=[
