@@ -144,46 +144,71 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column([ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700), ft.Text(value=f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=13, color=ft.Colors.GREY_700), ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True), ft.IconButton(icon=ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
         page.update()
 
-    # --- 1. 全体のランキング描画更新（画面サイズ潰れ ＆ 型不整合を完全修復） ---
+    # --- 1. 全体のランキング画面をその場で1から100%動的ビルドする処理（フリーズを完全撲滅） ---
     def update_ranking_ui():
-        ranking_list.controls.clear()
-        
-        # 💡 型バグを防ぐため、安全に文字列に変換して比較
+        # 💡 グローバル多重バインドによるクラッシュを防ぐため、コンポーネントをその場で1から生成します
         current_g_str = str(active_ranking_group).strip()
-        if current_g_str == "0":
-            ranking_title_text.value = "総合ハイスコアランキング (グループ 0: 管理者専用)"
+        
+        # 1. タイトルテキストのその場生成
+        title_display_text = "総合ハイスコアランキング (グループ 0: 管理者専用)" if current_g_str == "0" else f"総合ハイスコアランキング (グループ {current_g_str})"
+        dynamic_title = ft.Text(value=title_display_text, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
+        
+        # 2. ドロップダウンメニューのその場生成
+        dynamic_dropdown = ft.Dropdown(
+            label="表示グループ切り替え",
+            width=180,
+            value=current_g_str,
+            on_change=handle_ranking_group_switch
+        )
+        
+        # 💡 管理者（admin）なら、固定値を使わず全プレイヤーの最新所属をリアルタイム解析してドロップダウンを生成
+        if current_player == "admin":
+            try:
+                all_priv = supabase.table("privacy").select("group_number").execute()
+                detected_groups = {0}
+                if all_priv.data:
+                    for row in all_priv.data:
+                        if (raw_val := row.get("group_number")):
+                            for token in str(raw_val).replace("，", ",").split(","):
+                                if (t := token.strip()).isdigit(): detected_groups.add(int(t))
+                for g in sorted(list(detected_groups)):
+                    dynamic_dropdown.options.append(ft.dropdown.Option(str(g), "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"))
+            except Exception:
+                dynamic_dropdown.options.append(ft.dropdown.Option("0", "グループ 0 (管理者専用)"))
         else:
-            ranking_title_text.value = f"総合ハイスコアランキング (グループ {current_g_str})"
-            
+            # 一般プレイヤーは自分が所属しているグループだけを選択肢に並べる
+            for g in my_group_list:
+                dynamic_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
+
+        # 3. 順位表リスト（ListView）のその場生成
+        dynamic_list_view = ft.ListView(expand=True, spacing=10, padding=10)
+        
         try:
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
             hidden_users = [p["username"] for p in privacy_list if p.get("is_visible") is False]
             
-            # 各個人のカンマ区切り文字列を分解し、現在選択中のグループに含まれているユーザーを抽出
             same_group_users = []
             for p in privacy_list:
                 user_name = p.get("username")
                 raw_g_str = str(p.get("group_number", "1"))
-                
-                # 💡 すべて文字列のリストに統一して比較することで、型エラーを100%回避
                 user_g_list = [t.strip() for token in raw_g_str.replace("，", ",").split(",") if (t := token.strip())]
-                
                 if current_g_str in user_g_list: 
                     same_group_users.append(user_name)
             
             records_res = supabase.table("records").select("*").execute()
             all_records = [r for r in (records_res.data or []) if r.get("final_score", 0) > 0]
         except Exception as ex:
-            ranking_list.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            dynamic_list_view.controls.append(ft.Text(f"ランキング取得エラー: {ex}", color=ft.Colors.RED))
+            # クラッシュを完全に防ぐため、仮のレイアウトをドッキングして脱出
+            ranking_tab_view.content = ft.Container(content=dynamic_list_view, expand=True)
             page.update()
             return
             
         visible_records = [r for r in all_records if r["player"] not in hidden_users and r["player"] in same_group_users]
         if not visible_records:
-            ranking_list.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
+            dynamic_list_view.controls.append(ft.Text("このグループに公開されている記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
-            # 各プレイヤーの最高得点レコードを重複なく抽出
             user_best_records = {}
             for r in visible_records:
                 p_name = r["player"]
@@ -196,7 +221,7 @@ def main(page: ft.Page):
                 rank = index + 1
                 rank_color = ft.Colors.AMBER_500 if rank==1 else (ft.Colors.BLUE_GREY_300 if rank==2 else (ft.Colors.BROWN_400 if rank==3 else ft.Colors.BLUE_GREY_700))
                 rank_text = f"🥇 {rank}位" if rank==1 else (f"🥈 {rank}位" if rank==2 else (f"🥉 {rank}位" if rank==3 else f"  {rank}位"))
-                ranking_list.controls.append(
+                dynamic_list_view.controls.append(
                     ft.Container(
                         content=ft.Row(
                             controls=[
@@ -210,7 +235,36 @@ def main(page: ft.Page):
                         ), padding=12, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
                     )
                 )
+        
+        # 💡【フリーズを完全撲滅する核心】グローバルな枠（Container）の中身を、その場で完全に新しいレイアウトに差し替えます
+        ranking_tab_view.content = ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Row([
+                        ft.Container(content=dynamic_title, expand=True),
+                        dynamic_dropdown
+                    ],
+                    wrap=True,                     
+                    spacing=10,                    
+                    run_spacing=10,                
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=15
+                ),
+                ft.Container(content=dynamic_list_view, expand=True)
+            ],
+            spacing=0
+        )
         page.update()
+
+    # 💡 内部干渉を防ぐため、互換用に用意した空の関数
+    def refresh_ranking_dropdown_options():
+        pass
+
+    def handle_ranking_group_switch(e):
+        nonlocal active_ranking_group
+        active_ranking_group = e.control.value
+        update_ranking_ui()
 
     def save_current_game(e):
         if not current_player: return
@@ -227,69 +281,9 @@ def main(page: ft.Page):
         except Exception: return
         update_all_uis()
 
-    # --- 2. 表示グループ同期ロジック（自由設定・リアルタイム自動スキャン対応） ---
-    def refresh_ranking_dropdown_options():
-        current_value = ranking_group_dropdown.value
-        ranking_group_dropdown.options.clear()
-        
-        if current_player == "admin":
-            try:
-                all_priv = supabase.table("privacy").select("group_number").execute()
-                detected_groups = {0}
-                
-                if all_priv.data:
-                    for row in all_priv.data:
-                        raw_val = row.get("group_number")
-                        if raw_val:
-                            for token in str(raw_val).replace("，", ",").split(","):
-                                if (t := token.strip()).isdigit():
-                                    detected_groups.add(int(t))
-                
-                for g in sorted(list(detected_groups)):
-                    label_text = "グループ 0 (管理者専用)" if g == 0 else f"グループ {g}"
-                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
-            except Exception:
-                ranking_group_dropdown.options.append(ft.dropdown.Option("0", "グループ 0 (管理者専用)"))
-        else:
-            for g in my_group_list: 
-                ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-        
-        if current_value and any(opt.key == current_value for opt in ranking_group_dropdown.options):
-            ranking_group_dropdown.value = current_value
-        else:
-            ranking_group_dropdown.value = "0" if current_player == "admin" else (str(my_group_list[0]) if my_group_list else "1")
-            
-        page.update()
-
-    def handle_ranking_group_switch(e):
-        nonlocal active_ranking_group
-        active_ranking_group = e.control.value
-        update_ranking_ui()
-
-    # 💡【重要：サイズ潰れバグを100%解決するレイアウト構造】
-    # 外枠を確実に ft.Container(expand=True) で覆い、内部の Column のサイズ無限ループを完全にシャットアウトします
-    ranking_tab_view = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Container(
-                    content=ft.Row([
-                        ft.Container(content=ranking_title_text, expand=True),
-                        ranking_group_dropdown
-                    ],
-                    wrap=True,                     
-                    spacing=10,                    
-                    run_spacing=10,                
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=15
-                ),
-                # 💡 スクロールは全体のColumnではなく、一覧リスト（ListView）側に任せることで絶対フリーズを防ぎます
-                ft.Container(content=ranking_list, expand=True)
-            ],
-            spacing=0
-        ),
-        expand=True # 💡 これによりTabsの全領域に100%引き伸ばされます
-    )
+    # 💡【サイズ無限ループ完全回避ベース枠】
+    # 初期化時は中身を完全に空にしておき、タブが選ばれた瞬間に上記の update_ranking_ui が完璧な画面を動的に描画します
+    ranking_tab_view = ft.Container(expand=True)
 
 
     # --- 2. 既存ユーザーのログイン処理 ---
