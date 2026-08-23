@@ -445,7 +445,7 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
 
-    # 🏆 修正: 一般ユーザーの最新の my_group_list を基準に、グループごとのランキングを確実に構築する
+    # 🏆 修正: 選択されたグループに属するメンバーのランキングを正しく構築する
     def update_ranking_ui():
         ranking_list.controls.clear()
         selected_g = ranking_group_dropdown.value
@@ -457,32 +457,31 @@ def main(page: ft.Page):
         ranking_title_text.value = f"🏆 グループ {selected_g} ハイスコアランキング"
 
         try:
-            # records (全プレイヤーのゲームスコア) と privacy (各プレイヤーの所属) を全取得
             records_res = supabase.table("records").select("*").execute()
             privacy_res = supabase.table("privacy").select("*").execute()
             records_raw = records_res.data or []
             privacy_raw = privacy_res.data or []
 
-            # 💡 修正のコア: 選択中のグループ番号に属しているプレイヤー名を抽出
+            # 選択されたグループ番号に所属しているプレイヤーを抽出
             allowed_players = set()
             for p in privacy_raw:
                 p_name = p.get("username") or p.get("player")
                 g_str = str(p.get("group_number", "1"))
-                # カンマ区切りの所属グループ文字列をクリーンなリストに分解
                 p_groups = [x.strip() for x in g_str.replace("，", ",").split(",") if x.strip()]
                 
-                # 選択中のグループ番号（例: "3"）が含まれているプレイヤーを許可リストに追加
                 if selected_g in p_groups and p_name:
                     allowed_players.add(p_name)
 
-            # 管理者は管理者専用のグループ0を閲覧可能に（今回のリクエスト通りいったん無視でも動作へ影響しません）
-            if selected_g == "0":
+            # 管理者(admin)は例外としてグループ0に所属させ、全グループの移動を可能に
+            if selected_g == "0" or current_player == "admin":
                 allowed_players.add("admin")
 
-            # 許可されたプレイヤーの、1点以上の有効なレコードのみを抽出
+            # 選択されたグループに属し、スコアが1点以上のレコードを抽出
             filtered_records = []
             for r in records_raw:
                 p_name = r.get("player")
+                # 💡 管理者であっても、グループ0以外の特定のグループ（例: グループ3）を見ているときは、
+                # そのグループに属しているメンバー（allowed_players）だけのスコアを出すように調整
                 if p_name in allowed_players and r.get("final_score", 0) > 0:
                     filtered_records.append(r)
 
@@ -491,7 +490,6 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # 該当グループにデータがない場合のメッセージ
         if not filtered_records:
             ranking_list.controls.append(
                 ft.Container(
@@ -500,14 +498,14 @@ def main(page: ft.Page):
                 )
             )
         else:
-            # 各プレイヤーごとの自己ベスト（最高スコア）を算出
+            # プレイヤーごとの自己ベスト（最高スコア）を算出
             user_best = {}
             for r in filtered_records:
                 p_name = r["player"]
                 if p_name not in user_best or r["final_score"] > user_best[p_name]["final_score"]:
                     user_best[p_name] = r
 
-            # スコアの高い順に並び替え（降順ソート）
+            # スコアの降順ソート
             sorted_records = sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)
 
             new_controls = []
@@ -537,20 +535,48 @@ def main(page: ft.Page):
         page.update()
 
 
-    # 🏆 追加: ユーザーの最新の所属グループを元に、ドロップダウンの選択肢を再構築する
+    # 🏆 修正: 管理者(admin)なら「全グループ」、一般ユーザーなら「自分のグループのみ」をドロップダウンにセットする
     def refresh_ranking_dropdown_options():
         ranking_group_dropdown.options.clear()
         
-        # 自身が所属するグループ（my_group_list）をドロップダウンに追加
-        for g in sorted(my_group_list):
-            label_text = "グループ 0 (管理者)" if g == 0 else f"グループ {g}"
-            ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+        try:
+            if current_player == "admin":
+                # 💡 データベース(privacy)から全ユーザーが所属しているグループ番号を漏れなく自動検出する
+                privacy_res = supabase.table("privacy").select("group_number").execute()
+                detected_groups = set() # 重複を防ぐためのセット
+                
+                # 常に管理者専用のグループ0を初期候補として追加
+                detected_groups.add(0)
+                
+                if privacy_res.data:
+                    for row in privacy_res.data:
+                        g_str = str(row.get("group_number", "1"))
+                        # カンマ区切りの文字列を分解して、正しい数字であれば追加
+                        for token in g_str.replace("，", ",").split(","):
+                            if (t := token.strip()).isdigit():
+                                detected_groups.add(int(t))
+                
+                # 見つかったすべてのグループ番号を昇順（小さい順）にソートして追加
+                for g in sorted(list(detected_groups)):
+                    label_text = "グループ 0 (管理者)" if g == 0 else f"グループ {g}"
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+                    
+                ranking_group_dropdown.value = "0" # 管理者は初期状態でグループ0を表示
+            else:
+                # 💡 一般ユーザーの場合は、従来どおり自身の my_group_list のみを追加
+                for g in sorted(my_group_list):
+                    label_text = f"グループ {g}"
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+                    
+                if my_group_list:
+                    ranking_group_dropdown.value = str(my_group_list[0])
+                else:
+                    ranking_group_dropdown.value = None
+        except Exception:
+            # 万が一のフォールバック処理
+            ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
+            ranking_group_dropdown.value = "1"
             
-        # ドロップダウンの初期値を自身の最初のグループに設定
-        if my_group_list:
-            ranking_group_dropdown.value = str(my_group_list[0])
-        else:
-            ranking_group_dropdown.value = None
         page.update()
 
     # 🏆 追加: ドロップダウン変更時のイベントハンドラー
