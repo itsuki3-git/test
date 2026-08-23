@@ -335,12 +335,13 @@ def main(page: ft.Page):
             for g in my_group_list:
                 ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
 
-        if current_value and any(opt.key == current_value for opt in ranking_group_dropdown.options):
-            ranking_group_dropdown.value = current_value
+        # ⭕ 修正後: 存在しない文字列がDropdownの初期値に代入されるのを絶対に防ぐガード
+        if current_player == "admin":
+            ranking_group_dropdown.value = "0"
         else:
-            ranking_group_dropdown.value = "0" if current_player == "admin" else (
-                str(my_group_list[0]) if my_group_list else "1")
-
+            # my_group_listの最初の1つの要素を文字列にして安全に代入する
+            ranking_group_dropdown.value = str(my_group_list[0]) if (my_group_list and len(my_group_list) > 0) else "1"
+            
         page.update()
 
     def handle_ranking_group_switch(e):
@@ -962,21 +963,26 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
-    ranking_tab_view = ft.Column(controls=[
-        ft.Container(
-            content=ft.Row([
-                ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
-                ranking_group_dropdown
-            ],
-                wrap=True,
-                spacing=10,
-                run_spacing=10,
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=15
-        ),
-        ft.Container(content=ranking_list, expand=True)
-    ], expand=True, scroll=ft.ScrollMode.AUTO)
+    # ⭕ 修正後:ListViewが中でexpandしているため、親のColumnのスクロールは不要（競合エラーを回避）
+    ranking_tab_view = ft.Column(
+        controls=[
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(content=ranking_title_text, padding=ft.padding.only(bottom=5), expand=True),
+                    ranking_group_dropdown
+                ],
+                    wrap=True,
+                    spacing=10,
+                    run_spacing=10,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=15
+            ),
+            ft.Container(content=ranking_list, expand=True)
+        ], 
+        expand=True  # 💡 scrollプロパティを完全に削除しました
+    )
+
 
     main_tab_view = ft.Tabs(
         selected_index=0,
