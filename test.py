@@ -102,13 +102,13 @@ def main(page: ft.Page):
                             ui_text_map[key],
                             # ➕ 1増やすボタン（既存）
                             ft.IconButton(
-                                icon=ft.Icons.ADD_CIRCLE, 
+                                icon=ft.Icons.PLUS_ONE, 
                                 icon_color=color, 
                                 on_click=lambda e: adjust_count(key, 1)
                             ),
                             # 🚀 修正: お洒落なアイコンロゴ形式の「+3」ブーストボタン
                             ft.IconButton(
-                                icon=ft.Icons.PLUS_ONE, # 💡 ここをお好みのアイコン名に変えられます
+                                icon=ft.Icons.EXPOSURE_PLUS_3, # 💡 ここをお好みのアイコン名に変えられます
                                 icon_color=color,
                                 tooltip="一気に3つ追加",
                                 on_click=lambda e: adjust_count(key, 3)
