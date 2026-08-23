@@ -661,8 +661,7 @@ def main(page: ft.Page):
                           bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
                                             actions_alignment=ft.MainAxisAlignment.END)
     confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text(
-        "本当にアカウントを削除しますか？
-過去のゲーム記録もすべて消去され、元に戻すことはできません。"), actions=[
+        "本当にアカウントを削除しますか？"), actions=[
         ft.TextButton("キャンセル", on_click=lambda e: page.close(confirm_delete_dialog)),
         ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600),
                       on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
