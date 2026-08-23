@@ -797,11 +797,19 @@ def main(page: ft.Page):
 
     # --- 18. タブ切り替え時のフリーズを100%防止する安全なトリガー関数 ---
     def handle_tab_change(e):
-        # 💡 ランキングタブ（インデックス2）が選ばれたときだけ安全に最新データを同期
+        # 💡 ランキングタブ（インデックス2）が選ばれたときだけ安全に処理を実行
         if main_tab_view.selected_index == 2:
             try:
+                # 1. 一旦画面の表示を非表示にする（レイアウトのデッドロックを解除）
+                ranking_tab_view.visible = False
+                page.update()
+                
+                # 2. 安全な順序でドロップダウンと順位一覧のデータを詰め直す
                 refresh_ranking_dropdown_options()
                 update_ranking_ui()
+                
+                # 3. 画面の表示をオンに戻して、Fletに強制的に再描画させる
+                ranking_tab_view.visible = True
             except Exception:
                 pass
         page.update()
@@ -821,7 +829,7 @@ def main(page: ft.Page):
     calc_tab_view = ft.Column(controls=[
         ft.Container(content=ft.Column([ft.Text("現在の合計得点", size=14, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=10),
         ft.Container(content=ft.Column([create_fruit_selector("🍎 りんご", "apple", apple_count_text, ft.Colors.RED_600), create_fruit_selector("🍊 みかん", "orange", orange_count_text, ft.Colors.ORANGE_600), create_fruit_selector("🍇 ブドウ", "grape", grape_count_text, ft.Colors.PURPLE_600)], spacing=15), padding=10, expand=True),
-        ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
+        ft.Container(content=ft.Row(controls=[ft.OutlinedButton("リreset", icon=ft.Icons.REFRESH, on_click=reset_current_game, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)), ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
     ], expand=True)
     
     mypage_tab_view = ft.Column(controls=[
@@ -854,8 +862,7 @@ def main(page: ft.Page):
         ),
     ], expand=True, scroll=ft.ScrollMode.AUTO)
     
-    # 💡【サイズ潰れフリーズ完全解決レイアウト】
-    # 外枠をあらかじめタイトルとドロップダウンの実体が載ったコンテナ（expand=True）として初期化バインドします
+    # 💡 画面サイズが0pxに潰れるのを防ぐ、強制引き延ばしベースコンテナ
     ranking_tab_view = ft.Container(
         content=ft.Column(
             controls=[
@@ -892,7 +899,6 @@ def main(page: ft.Page):
 
     authenticated_view = ft.Column(controls=[global_header_bar, main_tab_view], expand=True, visible=False)
 
-    # 💡 順序バグを完全解決：まず最初に実体をページに配置させてロード時のフリーズを100%回避
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
@@ -908,3 +914,4 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
