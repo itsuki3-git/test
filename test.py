@@ -84,47 +84,59 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 🌾 アグリコラの要素セレクター（UI生成：-3, -1, 数量, +1, +3 の最強レイアウト）
+    # 🌾 アグリコラの要素セレクター（UI生成：スマホの狭い画面でも左側の文字が絶対に改行しない最適化版）
     def create_agricola_selector(label, key, color):
         return ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Text(label, size=15, weight=ft.FontWeight.W_500, expand=True),
+                    # 💡 修正: 横幅(width)を115に固定し、サイズを少し絞ることでスマホでも絶対に1行で収めます
+                    ft.Container(
+                        content=ft.Text(label, size=13, weight=ft.FontWeight.BOLD, no_wrap=True),
+                        width=115,
+                        alignment=ft.alignment.center_left
+                    ),
+                    # 右側の5連ボタンエリア
                     ft.Row(
                         controls=[
                             # -3
                             ft.TextButton(
                                 "-3", 
-                                style=ft.ButtonStyle(color=color), 
+                                style=ft.ButtonStyle(color=color, padding=0), # パディングを削って横幅を節約
                                 on_click=lambda e: adjust_count(key, -3)
                             ),
                             # -1
                             ft.TextButton(
                                 "-1", 
-                                style=ft.ButtonStyle(color=color), 
+                                style=ft.ButtonStyle(color=color, padding=0),
                                 on_click=lambda e: adjust_count(key, -1)
                             ),
                             # 🔢 現在の値（中央）
-                            ui_text_map[key],
+                            ft.Container(content=ui_text_map[key], width=35, alignment=ft.alignment.center),
                             # +1
                             ft.TextButton(
                                 "+1", 
-                                style=ft.ButtonStyle(color=color), 
+                                style=ft.ButtonStyle(color=color, padding=0),
                                 on_click=lambda e: adjust_count(key, 1)
                             ),
-                            # 🚀 修正: 一気に3つ増やす「+3」の文字ボタンを追加
+                            # +3
                             ft.TextButton(
                                 "+3", 
-                                style=ft.ButtonStyle(color=color), 
+                                style=ft.ButtonStyle(color=color, padding=0),
                                 on_click=lambda e: adjust_count(key, 3)
                             )
-                        ], spacing=0 # ボタンが横に広がって画面からはみ出さないよう隙間を詰めます
+                        ], 
+                        spacing=0,
+                        alignment=ft.MainAxisAlignment.END
                     )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            ), padding=8, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+                ], 
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ), 
+            padding=ft.padding.only(left=8, right=4, top=4, bottom=4), # スマホの縦スクロールを快適にするため上下の余白をタイトに
+            border=ft.border.all(1, ft.Colors.GREY_300), 
+            border_radius=10, 
+            bgcolor=ft.Colors.WHITE
         )
-
-
 
     # 🌾 アグリコラ公式ルールに基づく段階的な得点テーブル計算
     def get_agricola_score(key, value):
