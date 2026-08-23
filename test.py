@@ -988,17 +988,19 @@ def main(page: ft.Page):
         selected_index=0,
         animation_duration=300,
         tabs=[
-            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
-            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
-            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
+            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=ft.Container(content=calc_tab_view, expand=True)),
+            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=ft.Container(content=mypage_tab_view, expand=True)),
+            # 💡 修正のコア：ranking_tab_view を確実に描画させるため Container で包み込む！
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ft.Container(content=ranking_tab_view, expand=True))
         ],
         expand=True,
         on_change=lambda e: (
             refresh_ranking_dropdown_options(),
             update_ranking_ui() if main_tab_view.selected_index == 2 else None,
-            page.update()  # 💡 画面を強制的に再描画させるこの1行を追加！
+            page.update()
         )
     )
+
 
     authenticated_view = ft.Column(
         controls=[
