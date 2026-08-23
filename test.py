@@ -949,7 +949,7 @@ def main(page: ft.Page):
     
     mypage_tab_view = ft.Column(
         controls=[
-            ft.Container(content=ft.Text("あなたの過去 of ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
+            ft.Container(content=ft.Text("スコア一覧", size=16, weight=ft.FontWeight.BOLD,
                                          color=ft.Colors.BLUE_GREY_700),
                          padding=ft.padding.only(left=15, top=15, right=15)),
             ft.Container(content=my_records_list, height=220),
