@@ -120,6 +120,10 @@ def main(page: ft.Page):
 
     def update_all_uis():
         update_my_records_ui()
+        # 💡 追加: ログイン中であればドロップダウンを同期してランキングを更新
+        if current_player:
+            refresh_ranking_dropdown_options()
+            update_ranking_ui()
         if current_player == "admin": update_admin_ui()
 
     def update_my_records_ui():
@@ -437,7 +441,115 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"グループ変更失敗: {ex}")
 
+    # 🏆 追加: 選択されたグループ番号に絞り込んだランキングを構築・描画する
+    def update_ranking_ui():
+        ranking_list.controls.clear()
+        selected_g = ranking_group_dropdown.value
+        if not selected_g:
+            ranking_list.controls.append(ft.Text("表示するグループが選択されていません", italic=True, color=ft.Colors.GREY_500))
+            page.update()
+            return
 
+        ranking_title_text.value = f"🏆 グループ {selected_g} ハイスコアランキング"
+
+        try:
+            # records(スコア)とprivacy(所属グループ)のデータを全取得
+            records_res = supabase.table("records").select("*").execute()
+            privacy_res = supabase.table("privacy").select("*").execute()
+            records_raw = records_res.data or []
+            privacy_raw = privacy_res.data or []
+
+            # 選択されたグループに所属しているプレイヤーを抽出
+            allowed_players = set()
+            for p in privacy_raw:
+                p_name = p.get("username") or p.get("player")
+                g_str = str(p.get("group_number", "1"))
+                # カンマ区切りの所属番号をリスト化してチェック
+                p_groups = [x.strip() for x in g_str.replace("，", ",").split(",") if x.strip()]
+                if selected_g in p_groups and p_name:
+                    allowed_players.add(p_name)
+
+            # 管理者(admin)は例外としてグループ0で表示を分ける、または常に全許可にする場合は調整可能
+            if selected_g == "0":
+                allowed_players.add("admin")
+
+            # 該当グループに属し、スコアが1点以上の有効なレコードのみを厳選
+            filtered_records = []
+            for r in records_raw:
+                p_name = r.get("player")
+                if p_name in allowed_players and r.get("final_score", 0) > 0:
+                    filtered_records.append(r)
+
+        except Exception as ex:
+            ranking_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
+            page.update()
+            return
+
+        if not filtered_records:
+            ranking_list.controls.append(
+                ft.Container(
+                    content=ft.Text("このグループのゲーム記録はまだありません", color=ft.Colors.GREY_500, size=14),
+                    alignment=ft.alignment.center, padding=20
+                )
+            )
+        else:
+            # プレイヤーごとの自己ベスト（最高スコア）を算出
+            user_best = {}
+            for r in filtered_records:
+                p_name = r["player"]
+                if p_name not in user_best or r["final_score"] > user_best[p_name]["final_score"]:
+                    user_best[p_name] = r
+
+            # スコアの高い順に並び替え（降順ソート）
+            sorted_records = sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)
+
+            new_controls = []
+            for index, record in enumerate(sorted_records):
+                rank = index + 1
+                rank_color = ft.Colors.AMBER_500 if rank == 1 else (ft.Colors.BLUE_GREY_300 if rank == 2 else (
+                    ft.Colors.BROWN_400 if rank == 3 else ft.Colors.BLUE_GREY_700))
+                rank_text = f"🥇 {rank}位" if rank == 1 else (
+                    f"🥈 {rank}位" if rank == 2 else (f"🥉 {rank}位" if rank == 3 else f"  {rank}位"))
+
+                new_controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.Text(rank_text, size=16, weight=ft.FontWeight.BOLD, color=rank_color, width=60),
+                                ft.Column([
+                                    ft.Text(f"{record['player']}", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
+                                    ft.Text(f"内訳: 🍎{record['apple']} 🍊{record['orange']} 🍇{record['grape']}", size=11, color=ft.Colors.GREY_600)
+                                ], expand=True),
+                                ft.Text(f"{record['final_score']} 点", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ), padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8, bgcolor=ft.Colors.WHITE
+                    )
+                )
+            ranking_list.controls = new_controls
+
+        page.update()
+
+    # 🏆 追加: ユーザーの最新の所属グループを元に、ドロップダウンの選択肢を再構築する
+    def refresh_ranking_dropdown_options():
+        ranking_group_dropdown.options.clear()
+        
+        # 自身が所属するグループ（my_group_list）をドロップダウンに追加
+        for g in sorted(my_group_list):
+            label_text = "グループ 0 (管理者)" if g == 0 else f"グループ {g}"
+            ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+            
+        # ドロップダウンの初期値を自身の最初のグループに設定
+        if my_group_list:
+            ranking_group_dropdown.value = str(my_group_list[0])
+        else:
+            ranking_group_dropdown.value = None
+        page.update()
+
+    # 🏆 追加: ドロップダウン変更時のイベントハンドラー
+    def handle_ranking_group_switch(e):
+        update_ranking_ui()
+
+    
     def handle_forgot_check_user(e):
         name = forgot_name_input.value.strip()
         if not name:
@@ -776,6 +888,32 @@ def main(page: ft.Page):
         ]
     )
 
+    # 🏆 追加: ランキングタブで使用するUIコンポーネント
+    ranking_title_text = ft.Text(value="🏆 ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
+    
+    ranking_group_dropdown = ft.Dropdown(
+        label="グループ切り替え",
+        width=160,
+        options=[],
+        on_change=handle_ranking_group_switch
+    )
+    
+    ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
+
+    ranking_tab_view = ft.Column(
+        controls=[
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(content=ranking_title_text, expand=True),
+                    ranking_group_dropdown
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=15
+            ),
+            ft.Container(content=ranking_list, height=430) # 画面が潰れないように高さを固定
+        ]
+    )
+
+    
     mypage_tab_view = ft.Column(
         controls=[
             ft.Container(content=ft.Text("あなたの過去 of ゲーム結果一覧", size=16, weight=ft.FontWeight.BOLD,
@@ -816,24 +954,23 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.AUTO
     )
 
+    # 🏆 修正: ランキングタブを3つ目に追加し、on_changeで表示を更新
     main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
         tabs=[
             ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
             ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
+            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view), # 💡 ここを追加
         ],
         expand=True,
+        on_change=lambda e: (
+            # ランキングタブ(インデックス2)が開かれたら最新状態に更新する
+            (refresh_ranking_dropdown_options(), update_ranking_ui()) if main_tab_view.selected_index == 2 else None,
+            page.update()
+        )
     )
 
-    authenticated_view = ft.Column(
-        controls=[
-            global_header_bar,
-            main_tab_view
-        ],
-        expand=True,
-        visible=False
-    )
 
     page.controls.clear()
     page.add(login_view, authenticated_view)
