@@ -423,12 +423,14 @@ def main(page: ft.Page):
         try:
             res = supabase.table("users").select("secret_question").eq("username", current_player).execute()
             if res.data and len(res.data) > 0:
-                mypage_question_input.value = res.data[0].get("secret_question") or ""
+                mypage_question_input.value = res.data.get("secret_question") or ""
                 mypage_answer_input.value = ""
         except Exception:
             pass
 
-        login_view.visible = False
+        # 💡 修正のコア：グレーの箱を残さないよう、ページから login_view を完全に消去して authenticated_view だけを再配置する！
+        page.controls.clear()
+        page.add(authenticated_view)
         authenticated_view.visible = True
 
         if current_player == "admin" and len(main_tab_view.tabs) == 3:
@@ -440,6 +442,7 @@ def main(page: ft.Page):
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
+
 
     def check_auto_login():
         nonlocal my_group_list, active_ranking_group
@@ -501,9 +504,13 @@ def main(page: ft.Page):
         current_player = None
         login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
         login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
+        
+        # 💡 ログアウト時はログイン画面だけを配置し直す
+        page.controls.clear()
+        page.add(login_view)
         login_view.visible = True
-        authenticated_view.visible = False
         page.update()
+
 
     def handle_change_password(e):
         old_pass = mypage_old_pass.value.strip()
