@@ -665,7 +665,7 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
         padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
-    # 🌾 アグリコラ全15大項目のUI入力フォーム配置
+    # 🌾 アグリコラ全15大項目のUI入力フォーム配置（牛と未使用スペースの間に見やすい区切り線を追加）
     calc_tab_view = ft.ListView(
         controls=[
             ft.Container(
@@ -682,6 +682,10 @@ def main(page: ft.Page):
                     create_agricola_selector("🐑 羊の頭数", "sheep", ft.Colors.BLUE_GREY_400),
                     create_agricola_selector("🐗 猪の頭数", "wild_boar", ft.Colors.BROWN_400),
                     create_agricola_selector("🐂 牛の頭数", "cattle", ft.Colors.BLUE_GREY_700),
+                    
+                    # 💡 修正: 牛と未使用スペースの間に、グレーの区切り線（太さ1、上下余白10）を挿入しました
+                    ft.Divider(height=20, thickness=1, color=ft.Colors.GREY_400),
+                    
                     create_agricola_selector("❌ 未使用スペース (マイナス用)", "empty_space", ft.Colors.RED_400),
                     create_agricola_selector("🏠 柵の中の厩", "stable", ft.Colors.AMBER_800),
                     create_agricola_selector("🧱 レンガの部屋数", "clay_room", ft.Colors.DEEP_ORANGE_400),
@@ -701,6 +705,7 @@ def main(page: ft.Page):
         expand=True,
         spacing=10
     )
+
 
     mypage_tab_view = ft.Column(
         controls=[
