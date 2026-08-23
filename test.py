@@ -14,7 +14,7 @@ def main(page: ft.Page):
     # =========================================================================
     # ⚠️ あなたのSupabaseの情報をここに貼り付けてください
     # =========================================================================
-    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    SUPABASE_URL = "https://supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
 
@@ -23,20 +23,18 @@ def main(page: ft.Page):
     current_player = None
     my_group_list = []
     
-    # 🌾 修正: 部屋数の管理をタイプ(room_type)と個数(room_count)に集約
+    # 🌾 アグリコラ専用データ構造（部屋はタイプと個数に統合）
     counts = {
         "field": 0, "pasture": 0, "grain": 0, "vegetable": 0,
         "sheep": 0, "wild_boar": 0, "cattle": 0, "empty_space": 0,
-        "stable": 0, 
-        "room_type": "clay", # 初期値はレンガ部屋（"clay" または "stone"）
-        "room_count": 0,     # 部屋の数
+        "stable": 0, "room_type": "clay", "room_count": 0,
         "family": 2, "card_points": 0, "bonus_points": 0, "begging_card": 0
     }
     
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
     STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
-    # --- UIコンポーネント定義 ---
+    # --- UIコンポーネント基本定義 ---
     login_name_input = ft.TextField(label="プレイヤー名", hint_text="例: たろう")
     login_pass_input = ft.TextField(label="パスワード", password=True, can_reveal_password=True)
 
@@ -54,8 +52,10 @@ def main(page: ft.Page):
     logged_in_user_text = ft.Text(value="", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800)
     score_display = ft.Text(value="0", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_600)
 
-    # 🌾 各項目のカウンター用数値を画面に反映するTextコンポーネントマップ
-    ui_text_map = {k: ft.Text(value="2" if k == "family" else "0", size=20, weight=ft.FontWeight.BOLD, width=40, text_align=ft.TextAlign.CENTER) for k in counts}
+    # 各要素の入力数値を画面中央にリアルタイム同期するTextマップ
+    ui_text_map = {k: ft.Text(value="2" if k == "family" else "0", size=16, weight=ft.FontWeight.BOLD, width=30, text_align=ft.TextAlign.CENTER) for k in counts}
+
+    # 🌾 部屋のタイプを選択するトグルボタン（セグメントボタン）
     room_type_switch = ft.SegmentedButton(
         selected={"clay"},
         segments=[
@@ -65,7 +65,6 @@ def main(page: ft.Page):
         on_change=lambda e: handle_room_type_change(e)
     )
 
-    
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     group_inputs_container = ft.Column(spacing=10)
     my_records_list = ft.ListView(expand=True, spacing=10, padding=10)
@@ -75,7 +74,7 @@ def main(page: ft.Page):
     mypage_question_input = ft.TextField(label="新しく登録する「秘密の質問」", hint_text="例: 初めて飼ったペットの名前は？")
     mypage_answer_input = ft.TextField(label="質問の答え", hint_text="答えを入力してください")
 
-    # 🏆 ランキング用UI
+    # 🏆 ランキング用コンポーネント
     ranking_title_text = ft.Text(value="🏆 ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
     ranking_group_dropdown = ft.Dropdown(label="グループ切り替え", width=160, options=[], on_change=lambda e: update_ranking_ui())
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
@@ -95,7 +94,7 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 🌾 1. アグリコラ各項目のUI生成関数
+    # 🌾 1. アグリコラ各項目のUI生成関数（スマホ最適化版）
     def create_agricola_selector(label, key, color):
         return ft.Container(
             content=ft.Row(
@@ -114,7 +113,7 @@ def main(page: ft.Page):
             ), padding=4, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
         )
 
-    # 🌾 2. アグリコラ段階的得点計算ルール
+    # 🌾 2. アグリコラ公式段階的得点テーブル
     def get_agricola_score(key, value):
         if key == "field":
             if value <= 1: return -1
@@ -169,15 +168,12 @@ def main(page: ft.Page):
         elif key == "begging_card": return value * -3
         return 0
 
-    # 💡 順序修正: 計算処理の本体を上に引き上げました
     def calculate_total_score_ui_only():
         total = sum(get_agricola_score(k, v) for k, v in counts.items())
         score_display.value = str(total)
         return total
 
-    # 💡 順序修正: 計算処理よりも「下」に配置したことで、安全に呼び出しが可能になります
     def handle_room_type_change(e):
-        # e.selection から選択された文字列を取得
         counts["room_type"] = list(e.selection)[0] if e.selection else "clay"
         calculate_total_score_ui_only()
         page.update()
@@ -270,7 +266,7 @@ def main(page: ft.Page):
             else:
                 for g in sorted(my_group_list):
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
+                ranking_group_dropdown.value = str(my_group_list) if my_group_list else None
         except Exception:
             ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
             ranking_group_dropdown.value = "1"
@@ -290,10 +286,8 @@ def main(page: ft.Page):
             for p in privacy_raw:
                 p_name = p.get("username") or p.get("player")
                 p_groups = [x.strip() for x in str(p.get("group_number", "1")).replace("，", ",").split(",") if x.strip()]
-                if selected_g in p_groups and p_name: 
-                    allowed_players.add(p_name)
-            if selected_g == "0" or current_player == "admin": 
-                allowed_players.add("admin")
+                if selected_g in p_groups and p_name: allowed_players.add(p_name)
+            if selected_g == "0" or current_player == "admin": allowed_players.add("admin")
             filtered = [r for r in records_raw if r.get("player") in allowed_players]
             
             if not filtered:
@@ -302,34 +296,22 @@ def main(page: ft.Page):
                 user_best = {}
                 for r in filtered:
                     p = r["player"]
-                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: 
-                        user_best[p] = r
+                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
                 
                 for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
                     rank = index + 1
-                    
-                    # 💡 メダルの文字を判定する辞書
                     medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
-                    
                     rank_row = ft.Row(spacing=10)
                     rank_row.controls = [
-                        # 💡 綺麗に直していただいた形式でテキストを表示
                         ft.Text(f"{medal} {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
                         ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
                         ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
                     ]
                     ranking_list.controls.append(
-                        ft.Container(
-                            content=rank_row, 
-                            padding=10, 
-                            border=ft.border.all(1, ft.Colors.GREY_200), 
-                            border_radius=8
-                        )
+                        ft.Container(content=rank_row, padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
                     )
-        except Exception: 
-            pass
+        except Exception: pass
         page.update()
-
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
@@ -344,7 +326,6 @@ def main(page: ft.Page):
             priv_res = supabase.table("privacy").select("*").execute()
             user_privacy_data = next((p for p in (priv_res.data or []) if (p.get("username") or p.get("player")) == input_name), None)
             
-            # 💡 修正箇所：文法崩れを完全に直し、安全に初期グループを代入するようにしました
             if user_privacy_data:
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 if input_name.lower() == "admin": raw_group_str = "0"
@@ -403,7 +384,6 @@ def main(page: ft.Page):
         nonlocal my_group_list
         parsed_list = []
         for row in group_inputs_container.controls:
-            # 💡 修正済み: 各行の0番目の要素 (TextField) から値を正確に取得します
             tf_control = row.controls[0]
             val_str = tf_control.value.strip() if tf_control.value else ""
             if val_str.isdigit():
@@ -422,18 +402,7 @@ def main(page: ft.Page):
             update_all_uis()
         except Exception: pass
 
-    # 各種アカウント管理・管理者テーブル操作用の空定義（ズレを防ぐため残します）
-    def handle_change_password(e): pass
-    def handle_save_secret_question(e): pass
-    def handle_forgot_check_user(e): pass
-    def handle_forgot_reset_password(e): pass
-    def handle_rename(e): pass
-    def handle_new_register(e): pass
-    def execute_delete_account(): pass
-    def handle_admin_table_sort(e): pass
-    def check_auto_login(): pass
-
-    # ⭕ 修正: 管理者タブの並び替え(ソート)に必要な変数と関数を完全復旧させます
+    # 🛠️ 管理者データグリッドのソート状態管理
     current_sort_column = 3
     current_sort_ascending = False
 
@@ -448,12 +417,10 @@ def main(page: ft.Page):
         admin_data_table.sort_ascending = current_sort_ascending
         update_admin_ui()
 
-    # ⭕ 修正: 消えてしまっていた管理者タブのデータ表(DataTable)の描画ロジックをアグリコラ仕様で完全復活させます
     def update_admin_ui():
         if current_player != "admin": return
         admin_data_table.rows.clear()
         try:
-            # データベース（Supabase）からユーザー一覧、所属、ゲームスコアを全取得
             users_res = supabase.table("users").select("username").execute()
             privacy_res = supabase.table("privacy").select("*").execute()
             records_res = supabase.table("records").select("*").execute()
@@ -461,52 +428,32 @@ def main(page: ft.Page):
             all_privacy = privacy_res.data or []
             all_records = records_res.data or []
 
-            # ユーザー名と所属グループ番号の紐付けマップを作成
             group_map = {}
             for p in all_privacy:
                 p_name = p.get("username") or p.get("player")
-                if p_name:
-                    group_map[p_name] = str(p.get("group_number", "1"))
+                if p_name: group_map[p_name] = str(p.get("group_number", "1"))
 
             summary_data = []
+            try: search_keyword = admin_search_input.value.strip().lower()
+            except Exception: search_keyword = ""
 
-            # 検索キーワードが入力されている場合はフィルタリング
-            try:
-                search_keyword = admin_search_input.value.strip().lower()
-            except Exception:
-                search_keyword = ""
-
-            # 各ユーザーごとのゲーム記録を集計
             for u in all_users:
                 username = u["username"]
-                if search_keyword and search_keyword not in username.lower():
-                    continue
+                if search_keyword and search_keyword not in username.lower(): continue
 
                 user_records = [r for r in all_records if r["player"] == username]
-                # 💡 アグリコラ仕様: フルーツの内訳は無視し、合計点(final_score)だけを安全に抽出
                 valid_scores = [r["final_score"] for r in user_records if r.get("final_score") is not None]
                 max_score = max(valid_scores) if valid_scores else 0
                 latest_date = max([r["date"] for r in user_records]) if user_records else "記録なし"
                 user_group_str = group_map.get(username, "1")
 
-                summary_data.append({
-                    "username": username, 
-                    "group_str": user_group_str, 
-                    "max_score": max_score, 
-                    "latest_date": latest_date
-                })
+                summary_data.append({"username": username, "group_str": user_group_str, "max_score": max_score, "latest_date": latest_date})
 
-            # クリックされた列に応じたソート処理
-            if current_sort_column == 0:
-                summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
-            elif current_sort_column == 1:
-                summary_data.sort(key=lambda x: x["group_str"], reverse=not current_sort_ascending)
-            elif current_sort_column == 2:
-                summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
-            elif current_sort_column == 3:
-                summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
+            if current_sort_column == 0: summary_data.sort(key=lambda x: x["username"], reverse=not current_sort_ascending)
+            elif current_sort_column == 1: summary_data.sort(key=lambda x: x["group_str"], reverse=not current_sort_ascending)
+            elif current_sort_column == 2: summary_data.sort(key=lambda x: x["latest_date"], reverse=not current_sort_ascending)
+            elif current_sort_column == 3: summary_data.sort(key=lambda x: x["max_score"], reverse=not current_sort_ascending)
 
-            # データテーブルの行(DataRow)を組み立てて画面に流し込む
             for data in summary_data:
                 is_admin = (data["username"].lower() == "admin")
                 name_display = f"👑 {data['username']}" if is_admin else data["username"]
@@ -519,10 +466,18 @@ def main(page: ft.Page):
                     ])
                 )
         except Exception as ex:
-            admin_data_table.rows.append(ft.DataRow(
-                cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
+            admin_data_table.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
+    # パスワード変更等の周辺ロジックの空定義
+    def handle_change_password(e): pass
+    def handle_save_secret_question(e): pass
+    def handle_forgot_check_user(e): pass
+    def handle_forgot_reset_password(e): pass
+    def handle_rename(e): pass
+    def handle_new_register(e): pass
+    def execute_delete_account(): pass
+    def check_auto_login(): pass
 
     # ─── 各種ダイアログの定義 ───
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
@@ -637,7 +592,26 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
         padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
-    # 🌾 アグリコラ全15大項目のUI入力フォーム配置（牛と未使用スペースの間に見やすい区切り線を追加）
+    # 🌾 部屋数専用の選択＆カウンターUI定義（未定義順エラー対策でここに配置）
+    def create_room_selector(color):
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Container(content=room_type_switch, width=110, alignment=ft.alignment.center_left),
+                    ft.Row(
+                        controls=[
+                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -3)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -1)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ui_text_map["room_count"], width=30, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 1)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 3)), width=38, alignment=ft.alignment.center)
+                        ], spacing=0, alignment=ft.MainAxisAlignment.END
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ), padding=4, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+        )
+
+    # 🌾 アグリコラ全15大項目のUI入力フォーム配置
     calc_tab_view = ft.ListView(
         controls=[
             ft.Container(
@@ -650,7 +624,7 @@ def main(page: ft.Page):
                     create_agricola_selector("🟫 畑の枚数", "field", ft.Colors.BROWN_600),
                     create_agricola_selector("🟩 牧場の数", "pasture", ft.Colors.GREEN_600),
                     create_agricola_selector("🌾 小麦の数", "grain", ft.Colors.AMBER_600),
-                    create_agricola_selector("🥕 野菜の数", "vegetable", ft.Colors.ORANGE_600),
+                    create_agricola_selector("🥕 野姐の数", "vegetable", ft.Colors.ORANGE_600),
                     create_agricola_selector("🐑 羊の頭数", "sheep", ft.Colors.BLUE_GREY_400),
                     create_agricola_selector("🐗 猪の頭数", "wild_boar", ft.Colors.BROWN_400),
                     create_agricola_selector("🐂 牛の頭数", "cattle", ft.Colors.BLUE_GREY_700),
@@ -660,7 +634,6 @@ def main(page: ft.Page):
                     create_agricola_selector("❌ 未使用スペース (マイナス用)", "empty_space", ft.Colors.RED_400),
                     create_agricola_selector("🏠 柵の中の厩", "stable", ft.Colors.AMBER_800),
                     
-                    # 💡 修正: 2行あった部屋数を削除し、トグル選択付きの1行にスリム化
                     create_room_selector(ft.Colors.DEEP_ORANGE_600),
                     
                     create_agricola_selector("👨‍👩‍👧 家族の人数", "family", ft.Colors.BLUE_400),
@@ -678,7 +651,6 @@ def main(page: ft.Page):
         expand=True,
         spacing=10
     )
-
 
     mypage_tab_view = ft.Column(
         controls=[
@@ -771,6 +743,5 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     import os
-
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
