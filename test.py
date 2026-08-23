@@ -734,7 +734,7 @@ def main(page: ft.Page):
     confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text("本当にアカウントを削除しますか？\n過去のゲーム記録もすべて消去され、元に戻すことはできません。"), actions=[ft.TextButton("キャンセル", on_click=lambda e: (setattr(confirm_delete_dialog, "open", False), page.update())), ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
     forgot_dialog = ft.AlertDialog(title=ft.Text("🔑 パスワードの再設定"), content=ft.Container(content=ft.Column([forgot_name_input, ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input, forgot_new_pass_input], spacing=10, tight=True), width=320, height=325), actions=[ft.TextButton("キャンセル", on_click=lambda e: (setattr(forgot_dialog, "open", False), page.update())), ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     
-    # 💡【楽々UI拡張】グループ番号変更のポップアップを、追加・削除を並列で実行する特製レイアウトに変更！
+    # 💡【バグ修正】Containerの max_height=140 を height=140 にきれいに修正しました
     change_group_dialog = ft.AlertDialog(
         title=ft.Text("🔢 所属グループの追加と削除"),
         content=ft.Container(
@@ -746,7 +746,7 @@ def main(page: ft.Page):
                 ]),
                 ft.Divider(height=10),
                 ft.Text("【現在の所属グループ一覧】", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700),
-                ft.Container(content=popup_current_group_container, max_height=140)
+                ft.Container(content=popup_current_group_container, height=140)
             ], tight=True, spacing=5),
             width=320, height=270
         ),
