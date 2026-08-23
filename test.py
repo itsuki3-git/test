@@ -183,12 +183,12 @@ def main(page: ft.Page):
             privacy_res = supabase.table("privacy").select("*").execute()
             privacy_list = privacy_res.data or []
             
-            # カラム名が 'username' でも 'player' でも両対応可能な安全設計
-            hidden_users = []
-            for p in privacy_list:
-                p_name = p.get("username") or p.get("player")
-                if p_name and p.get("is_visible") is False:
-                    hidden_users.append(p_name)
+            # 💡 カラム名が username でも player でもどちらでも動くように修正
+            hidden_users = [
+                (p.get("username") or p.get("player")) 
+                for p in privacy_list 
+                if p.get("is_visible") is False and (p.get("username") or p.get("player"))
+            ]
 
             same_group_users = []
             for p in privacy_list:
@@ -214,11 +214,10 @@ def main(page: ft.Page):
             page.update()
             return
 
-        visible_records = [r for r in all_records if
-                           r["player"] not in hidden_users and r["player"] in same_group_users]
-                           
+        visible_records = [r for r in all_records if r["player"] not in hidden_users and r["player"] in same_group_users]
+        
+        # 💡 表示できるスコアデータが1件もない場合の案内テキストを追加
         if not visible_records:
-            # 💡 表示できるスコアがない場合のテキスト案内レイアウト
             ranking_list.controls.append(
                 ft.Container(
                     content=ft.Column([
@@ -229,6 +228,7 @@ def main(page: ft.Page):
                     padding=30
                 )
             )
+            page.update()
         else:
             user_best_records = {}
             for r in visible_records:
@@ -956,7 +956,7 @@ def main(page: ft.Page):
         ft.Container(content=ranking_list, expand=True)
     ], expand=True, scroll=ft.ScrollMode.AUTO)
 
-    main_tab_view = ft.Tabs(
+        main_tab_view = ft.Tabs(
         selected_index=0,
         animation_duration=300,
         tabs=[
@@ -965,8 +965,11 @@ def main(page: ft.Page):
             ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)
         ],
         expand=True,
-        on_change=lambda e: (refresh_ranking_dropdown_options(),
-                             update_ranking_ui() if main_tab_view.selected_index == 2 else None)
+        on_change=lambda e: (
+            refresh_ranking_dropdown_options(),
+            update_ranking_ui() if main_tab_view.selected_index == 2 else None,
+            page.update()  # 💡 画面を強制的に再描画させるこの1行を追加！
+        )
     )
 
     authenticated_view = ft.Column(
