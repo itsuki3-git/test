@@ -681,7 +681,7 @@ def main(page: ft.Page):
                 controls=[
                     group_inputs_container,
                     ft.TextButton(
-                        "＋ グループを追加",
+                        "グループを追加",
                         icon=ft.Icons.ADD,
                         on_click=add_blank_group_input_row
                     )
