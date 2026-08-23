@@ -95,102 +95,26 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 🌾 アグリコラの要素セレクター（UI生成：スマホの細い画面でも+3ボタンまで確実に1行で収まる完全版）
+    # 🌾 1. アグリコラ各項目のUI生成関数
     def create_agricola_selector(label, key, color):
         return ft.Container(
             content=ft.Row(
                 controls=[
-                    # 💡 左側のテキストエリア（横幅を110に微調整してさらにスペースを確保）
-                    ft.Container(
-                        content=ft.Text(label, size=13, weight=ft.FontWeight.BOLD, no_wrap=True),
-                        width=110,
-                        alignment=ft.alignment.center_left
-                    ),
-                    # 右側の5連ボタンエリア
+                    ft.Container(content=ft.Text(label, size=13, weight=ft.FontWeight.BOLD, no_wrap=True), width=110, alignment=ft.alignment.center_left),
                     ft.Row(
                         controls=[
-                            # ⏪ -3 ボタン
-                            ft.Container(
-                                content=ft.TextButton(
-                                    "-3", 
-                                    style=ft.ButtonStyle(color=color, padding=0),
-                                    on_click=lambda e: adjust_count(key, -3)
-                                ),
-                                width=38,
-                                alignment=ft.alignment.center
-                            ),
-                            # ➖ -1 ボタン
-                            ft.Container(
-                                content=ft.TextButton(
-                                    "-1", 
-                                    style=ft.ButtonStyle(color=color, padding=0),
-                                    on_click=lambda e: adjust_count(key, -1)
-                                ),
-                                width=38,
-                                alignment=ft.alignment.center
-                            ),
-                            # 🔢 現在の値（中央）
-                            ft.Container(
-                                content=ui_text_map[key], 
-                                width=30, 
-                                alignment=ft.alignment.center
-                            ),
-                            # ➕ +1 ボタン
-                            ft.Container(
-                                content=ft.TextButton(
-                                    "+1", 
-                                    style=ft.ButtonStyle(color=color, padding=0),
-                                    on_click=lambda e: adjust_count(key, 1)
-                                ),
-                                width=38,
-                                alignment=ft.alignment.center
-                            ),
-                            # ⏩ +3 ボタン（💡 幅を制限して確実に画面内に引き戻します）
-                            ft.Container(
-                                content=ft.TextButton(
-                                    "+3", 
-                                    style=ft.ButtonStyle(color=color, padding=0),
-                                    on_click=lambda e: adjust_count(key, 3)
-                                ),
-                                width=38,
-                                alignment=ft.alignment.center
-                            )
-                        ], 
-                        spacing=0,
-                        alignment=ft.MainAxisAlignment.END
-                    )
-                ], 
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ), 
-            padding=ft.padding.only(left=8, right=4, top=4, bottom=4), 
-            border=ft.border.all(1, ft.Colors.GREY_300), 
-            border_radius=10, 
-            bgcolor=ft.Colors.WHITE
-        )
-        
-    # 🌾 追加: 部屋専用の選択＆カウンターUI
-    def create_room_selector(color):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    # 左側：部屋のタイプを選ぶトグルボタン
-                    ft.Container(content=room_type_switch, width=120, alignment=ft.alignment.center_left),
-                    # 右側：部屋数を入力する5連ボタン
-                    ft.Row(
-                        controls=[
-                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -3)), width=36, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -1)), width=36, alignment=ft.alignment.center),
-                            ft.Container(content=ui_text_map["room_count"], width=30, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 1)), width=36, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 3)), width=36, alignment=ft.alignment.center)
+                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, -3)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, -1)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ui_text_map[key], width=30, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, 1)), width=38, alignment=ft.alignment.center),
+                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, 3)), width=38, alignment=ft.alignment.center)
                         ], spacing=0, alignment=ft.MainAxisAlignment.END
                     )
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ), padding=6, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
+            ), padding=4, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
         )
 
-    # 🌾 修正: room_type に応じて1部屋あたりの点数を動的に切り替える
+    # 🌾 2. アグリコラ段階的得点計算ルール
     def get_agricola_score(key, value):
         if key == "field":
             if value <= 1: return -1
@@ -236,21 +160,25 @@ def main(page: ft.Page):
             else: return 4
         elif key == "empty_space": return value * -1
         elif key == "stable": return value * 1
-        
-        # 💡 部屋数の計算ロジックを集約
         elif key == "room_count":
             multiplier = 2 if counts["room_type"] == "stone" else 1
             return value * multiplier
-            
         elif key == "family": return value * 3
         elif key == "card_points": return value
         elif key == "bonus_points": return value
         elif key == "begging_card": return value * -3
         return 0
 
-    # 🌾 追加: 部屋のタイプ（レンガ/石）が切り替わったときのイベント
+    # 💡 順序修正: 計算処理の本体を上に引き上げました
+    def calculate_total_score_ui_only():
+        total = sum(get_agricola_score(k, v) for k, v in counts.items())
+        score_display.value = str(total)
+        return total
+
+    # 💡 順序修正: 計算処理よりも「下」に配置したことで、安全に呼び出しが可能になります
     def handle_room_type_change(e):
-        counts["room_type"] = list(e.selection)[0]
+        # e.selection から選択された文字列を取得
+        counts["room_type"] = list(e.selection)[0] if e.selection else "clay"
         calculate_total_score_ui_only()
         page.update()
 
