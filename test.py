@@ -479,13 +479,54 @@ def main(page: ft.Page):
             admin_data_table.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
+    def handle_new_register(e):
+        # 1. 入力値の取得とバリデーション
+        username = login_name_input.value.strip()
+        password = login_pass_input.value.strip()
+
+        if not username:
+            show_alert("プレイヤー名を入力してください。")
+            return
+        if len(password) < 4:
+            show_alert("パスワードは4桁以上で入力してください。")
+            return
+
+        try:
+            # 2. ユーザーの重複チェック
+            existing_user = supabase.table("users").select("username").eq("username", username).execute()
+            if existing_user.data and len(existing_user.data) > 0:
+                show_alert("このプレイヤー名は既に登録されています。")
+                return
+
+            # 3. パスワードのハッシュ化とデータ挿入
+            hashed_pass = hash_password(password)
+            
+            # users テーブルへの追加
+            supabase.table("users").insert({
+                "username": username,
+                "password": hashed_pass
+            }).execute()
+
+            # privacy（グループ管理等）テーブルへの追加（初期グループは 1）
+            supabase.table("privacy").insert({
+                "username": username,
+                "group_number": "1"
+            }).execute()
+
+            # 4. 登録成功後の自動ログイン処理
+            page.overlay.append(ft.SnackBar(ft.Text(f"🎉 {username} さんの登録が完了しました！"), open=True))
+            handle_existing_login(None) # そのままログインさせる
+
+        except Exception as ex:
+            show_alert(f"新規登録に失敗しました: {ex}")
+
+    
     # パスワード変更等の周辺ロジックの空定義
     def handle_change_password(e): pass
     def handle_save_secret_question(e): pass
     def handle_forgot_check_user(e): pass
     def handle_forgot_reset_password(e): pass
     def handle_rename(e): pass
-    def handle_new_register(e): pass
     def execute_delete_account(): pass
     def check_auto_login(): pass
 
