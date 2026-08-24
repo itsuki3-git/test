@@ -558,46 +558,46 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"パスワード変更失敗: {ex}")
 
-        def handle_save_secret_question(e):
-            if not current_player: return
-            question = mypage_question_input.value.strip()
-            answer = mypage_answer_input.value.strip()
-    
-            if not question or not answer:
-                show_alert("質問と答えの両方を入力してください。")
-                return
-    
-            try:
-                # 答えをハッシュ化して安全に保存
-                hashed_answer = hash_password(answer)
-                
-                # 既存のprivacyデータがあるか確認
-                priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
-                
-                # カラム名が 'secret_question' と 'secret_answer' だと想定
-                update_data = {
-                    "secret_question": question,
-                    "secret_answer": hashed_answer
-                }
-                
-                if priv_res.data:
-                    # 既存レコードの更新
-                    p_key = "username" if "username" in priv_res.data[0] else "player"
-                    supabase.table("privacy").update(update_data).eq(p_key, current_player).execute()
-                else:
-                    # なければ新規挿入
-                    update_data["username"] = current_player
-                    update_data["group_number"] = "1"
-                    supabase.table("privacy").insert(update_data).execute()
-    
-                mypage_question_input.value = ""
-                mypage_answer_input.value = ""
-                page.close(secret_question_dialog)
-                
-                page.overlay.append(ft.SnackBar(ft.Text("🛡️ 秘密の質問を設定しました"), open=True))
-                page.update()
-            except Exception as ex:
-                show_alert(f"秘密の質問設定失敗: {ex}")
+    def handle_save_secret_question(e):
+        if not current_player: return
+        question = mypage_question_input.value.strip()
+        answer = mypage_answer_input.value.strip()
+
+        if not question or not answer:
+            show_alert("質問と答えの両方を入力してください。")
+            return
+
+        try:
+            # 答えをハッシュ化して安全に保存
+            hashed_answer = hash_password(answer)
+            
+            # 既存のprivacyデータがあるか確認
+            priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
+            
+            # カラム名が 'secret_question' と 'secret_answer' だと想定
+            update_data = {
+                "secret_question": question,
+                "secret_answer": hashed_answer
+            }
+            
+            if priv_res.data:
+                # 既存レコードの更新
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").update(update_data).eq(p_key, current_player).execute()
+            else:
+                # なければ新規挿入
+                update_data["username"] = current_player
+                update_data["group_number"] = "1"
+                supabase.table("privacy").insert(update_data).execute()
+
+            mypage_question_input.value = ""
+            mypage_answer_input.value = ""
+            page.close(secret_question_dialog)
+            
+            page.overlay.append(ft.SnackBar(ft.Text("🛡️ 秘密の質問を設定しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"秘密の質問設定失敗: {ex}")
                 
     def handle_rename(e):
         nonlocal current_player
