@@ -634,7 +634,7 @@ def main(page: ft.Page):
                     create_agricola_selector("🟫 畑の枚数", "field", ft.Colors.BROWN_600),
                     create_agricola_selector("🟩 牧場の数", "pasture", ft.Colors.GREEN_600),
                     create_agricola_selector("🌾 小麦の数", "grain", ft.Colors.AMBER_600),
-                    create_agricola_selector("🥕 野姐の数", "vegetable", ft.Colors.ORANGE_600),
+                    create_agricola_selector("🥕 野菜の数", "vegetable", ft.Colors.ORANGE_600),
                     create_agricola_selector("🐑 羊の頭数", "sheep", ft.Colors.BLUE_GREY_400),
                     create_agricola_selector("🐗 猪の頭数", "wild_boar", ft.Colors.BROWN_400),
                     create_agricola_selector("🐂 牛の頭数", "cattle", ft.Colors.BLUE_GREY_700),
