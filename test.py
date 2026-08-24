@@ -520,15 +520,234 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"新規登録に失敗しました: {ex}")
 
+    def handle_change_password(e):
+        if not current_player: return
+        old_pass = mypage_old_pass.value.strip()
+        new_pass = mypage_new_pass.value.strip()
+
+        if not old_pass or not new_pass:
+            show_alert("両方のパスワードを入力してください。")
+            return
+        if len(new_pass) < 4:
+            show_alert("新しいパスワードは4桁以上で入力してください。")
+            return
+
+        try:
+            # 現在のパスワードが合っているかDBを確認
+            hashed_old = hash_password(old_pass)
+            res = supabase.table("users").select("password").eq("username", current_player).execute()
+            
+            if not res.data or res.data[0]["password"] != hashed_old:
+                show_alert("現在のパスワードが間違っています。")
+                return
+
+            # 新しいパスワードをハッシュ化して更新
+            hashed_new = hash_password(new_pass)
+            supabase.table("users").update({"password": hashed_new}).eq("username", current_player).execute()
+
+            # 入力欄のクリアとダイアログを閉じる
+            mypage_old_pass.value = ""
+            mypage_new_pass.value = ""
+            page.close(change_pass_dialog)
+            
+            # クライアントストレージの記憶も更新
+            page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
+            
+            page.overlay.append(ft.SnackBar(ft.Text("🔒 パスワードを変更しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"パスワード変更失敗: {ex}")
+
+        def handle_save_secret_question(e):
+            if not current_player: return
+            question = mypage_question_input.value.strip()
+            answer = mypage_answer_input.value.strip()
     
-    # パスワード変更等の周辺ロジックの空定義
-    def handle_change_password(e): pass
-    def handle_save_secret_question(e): pass
-    def handle_forgot_check_user(e): pass
-    def handle_forgot_reset_password(e): pass
-    def handle_rename(e): pass
-    def execute_delete_account(): pass
-    def check_auto_login(): pass
+            if not question or not answer:
+                show_alert("質問と答えの両方を入力してください。")
+                return
+    
+            try:
+                # 答えをハッシュ化して安全に保存
+                hashed_answer = hash_password(answer)
+                
+                # 既存のprivacyデータがあるか確認
+                priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
+                
+                # カラム名が 'secret_question' と 'secret_answer' だと想定
+                update_data = {
+                    "secret_question": question,
+                    "secret_answer": hashed_answer
+                }
+                
+                if priv_res.data:
+                    # 既存レコードの更新
+                    p_key = "username" if "username" in priv_res.data[0] else "player"
+                    supabase.table("privacy").update(update_data).eq(p_key, current_player).execute()
+                else:
+                    # なければ新規挿入
+                    update_data["username"] = current_player
+                    update_data["group_number"] = "1"
+                    supabase.table("privacy").insert(update_data).execute()
+    
+                mypage_question_input.value = ""
+                mypage_answer_input.value = ""
+                page.close(secret_question_dialog)
+                
+                page.overlay.append(ft.SnackBar(ft.Text("🛡️ 秘密の質問を設定しました"), open=True))
+                page.update()
+            except Exception as ex:
+                show_alert(f"秘密の質問設定失敗: {ex}")
+                
+    def handle_rename(e):
+        nonlocal current_player
+        if not current_player: return
+        new_name = edit_name_input.value.strip()
+
+        if not new_name:
+            show_alert("新しい名前を入力してください。")
+            return
+        if new_name == current_player:
+            page.close(change_name_dialog)
+            return
+
+        try:
+            # 重複チェック
+            existing = supabase.table("users").select("username").eq("username", new_name).execute()
+            if existing.data:
+                show_alert("その名前は既に使われています。")
+                return
+
+            # 各テーブルの名前を一括更新 (※外部キー制約のON UPDATE CASCADEがない場合、手動更新が必要)
+            supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
+            
+            # privacyテーブルの更新 (カラム名がusernameかplayerかで対応)
+            priv_res = supabase.table("privacy").select("*").execute()
+            if priv_res.data:
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").update({p_key: new_name}).eq(p_key, current_player).execute()
+                
+            # 過去の対戦記録(records)のプレイヤー名も更新
+            supabase.table("records").update({"player": new_name}).eq("player", current_player).execute()
+
+            # ローカルの管理状態を更新
+            old_name = current_player
+            current_player = new_name
+            logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
+            
+            page.client_storage.set(STORAGE_REMEMBER_USER, new_name)
+            page.close(change_name_dialog)
+            
+            update_all_uis()
+            page.overlay.append(ft.SnackBar(ft.Text(f"👤 名前を {new_name} に変更しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"名前変更失敗: {ex}")
+
+    def execute_delete_account():
+        nonlocal current_player
+        if not current_player: return
+
+        try:
+            # 関連データの削除
+            supabase.table("records").delete().eq("player", current_player).execute()
+            
+            priv_res = supabase.table("privacy").select("*").execute()
+            if priv_res.data:
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").delete().eq(p_key, current_player).execute()
+
+            supabase.table("users").delete().eq("username", current_player).execute()
+
+            # ストレージとセッションのクリア
+            page.client_storage.remove(STORAGE_REMEMBER_USER)
+            page.client_storage.remove(STORAGE_REMEMBER_PASS)
+            current_player = None
+            
+            page.close(confirm_delete_dialog)
+            
+            # ログイン画面へ戻す
+            page.controls.clear()
+            page.add(login_view)
+            page.overlay.append(ft.SnackBar(ft.Text("⚠️ アカウントを完全に削除しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"アカウント削除失敗: {ex}")
+
+    def handle_forgot_check_user(e):
+        target_user = forgot_name_input.value.strip()
+        if not target_user:
+            show_alert("プレイヤー名を入力してください。")
+            return
+
+        try:
+            res = supabase.table("privacy").select("*").execute()
+            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
+            
+            if not user_priv or not user_priv.get("secret_question"):
+                forgot_question_text.value = "❌ 秘密の質問が登録されていないか、ユーザーが見つかりません"
+                forgot_question_text.color = ft.Colors.RED
+                page.update()
+                return
+
+            # 質問文を画面にセットして有効化
+            forgot_question_text.value = f"❓ 質問: {user_priv.get('secret_question')}"
+            forgot_question_text.color = ft.Colors.BLUE_600
+            page.update()
+        except Exception as ex:
+            show_alert(f"ユーザー確認エラー: {ex}")
+
+    def handle_forgot_reset_password(e):
+        target_user = forgot_name_input.value.strip()
+        answer = forgot_answer_input.value.strip()
+        new_pass = forgot_new_pass_input.value.strip()
+
+        if not target_user or not answer or not new_pass:
+            show_alert("すべての項目を入力してください。")
+            return
+        if len(new_pass) < 4:
+            show_alert("新しいパスワードは4桁以上必要です。")
+            return
+
+        try:
+            # 登録されている答えのハッシュを取得
+            res = supabase.table("privacy").select("*").execute()
+            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
+            
+            if not user_priv or not user_priv.get("secret_answer"):
+                show_alert("再設定手続きを行えません。")
+                return
+
+            # 回答の照合
+            if hash_password(answer) != user_priv.get("secret_answer"):
+                show_alert("秘密の質問の答えが間違っています。")
+                return
+
+            # パスワードを更新
+            hashed_new_pass = hash_password(new_pass)
+            supabase.table("users").update({"password": hashed_new_pass}).eq("username", target_user).execute()
+
+            # ダイアログを閉じてフォームリセット
+            page.close(forgot_dialog)
+            login_name_input.value = target_user
+            login_pass_input.value = new_pass
+            
+            page.overlay.append(ft.SnackBar(ft.Text("🎉 パスワードを再設定しました。ログインしてください。"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"パスワード再設定失敗: {ex}")
+
+    def check_auto_login():
+        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
+        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
+        
+        # 記憶されたデータがあれば自動でログイン処理を走らせる
+        if saved_user and saved_pass:
+            login_name_input.value = saved_user
+            login_pass_input.value = saved_pass
+            # すでに定義済みのログイン処理に偽のイベント(None)を渡して実行
+            handle_existing_login(None)
+
 
     # ─── 各種ダイアログの定義 ───
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
