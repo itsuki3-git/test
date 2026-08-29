@@ -954,33 +954,41 @@ def main(page: ft.Page):
         except ValueError:
             show_alert("数字のみ入力してください。")
 
-    # 💡 7. メインの計算ダイアログ（3つの項目の横にそれぞれ個別リストボタンを配置）
+    # 💡 7. メインの計算ダイアログ（縦幅を広げ、スクロールできるように修正しました）
     bonus_calc_dialog = ft.AlertDialog(
         title=ft.Text("🃏 カード・ボーナス点の計算"),
         content=ft.Container(
             content=ft.Column([
-                # 職業
+                # 👨‍🍳 職業
                 ft.Row([
                     calc_jobs_input,
                     ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"))
                 ], alignment=ft.MainAxisAlignment.CENTER),
-                # 小さい進歩
+                
+                # 🃏 小さい進歩
                 ft.Row([
                     calc_minor_input,
                     ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"))
                 ], alignment=ft.MainAxisAlignment.CENTER),
-                # 大きい進歩
+                
+                # 🏛️ 大きい進歩
                 ft.Row([
                     calc_major_input,
                     ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"))
                 ], alignment=ft.MainAxisAlignment.CENTER),
-                # その他（ここだけ直接入力のみ）
+                
+                # 🎁 その他（ここだけ直接入力のみ）
                 calc_other_input,
+                
                 ft.Divider(),
                 calc_total_text
-            ], spacing=10, tight=True),
+            ], 
+            spacing=12, 
+            tight=True,
+            scroll=ft.ScrollMode.AUTO  # 💡 画面が小さくてもスクロールしてすべて見えるように設定
+            ),
             width=340,
-            height=370  # 少し縦に広がったため、表示高さを370に微調整
+            height=420  # 💡 すべての項目とアイコンが収まるように高さを420に拡大
         ),
         actions=[
             ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
