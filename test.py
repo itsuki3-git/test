@@ -791,11 +791,11 @@ def main(page: ft.Page):
     individual_minors = []  # 小さい進歩
     individual_majors = []  # 大きい進歩
 
-    # メインダイアログ用のTextField定義（💡 width=240 で横幅を固定し、アイコンを押し出さないように修正）
-    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
-    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
-    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
-    calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
+    # メインダイアログ用のTextField定義（💡 幅180pxで完全に固定して事故を防ぎます）
+    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=180, height=45, text_size=13)
+    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=180, height=45, text_size=13)
+    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=180, height=45, text_size=13)
+    calc_other_input = ft.TextField(label="🎁 その他のボーナス", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=180, height=45, text_size=13)
     calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
 
     # サブダイアログ用の入力コンポーネント（3:1 の黄金比率で綺麗に収まります）
@@ -934,6 +934,57 @@ def main(page: ft.Page):
         ),
         actions=[
             ft.ElevatedButton("閉じてメインに戻る", on_click=lambda e: page.close(card_detail_dialog), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    # 確定ボタンを押した時の処理
+    def handle_confirm_bonus(e):
+        try:
+            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
+            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
+            major = int(calc_major_input.value) if calc_major_input.value else 0
+            other = int(calc_other_input.value) if calc_other_input.value else 0
+            
+            counts["bonus_calc_points"] = jobs + minor + major + other
+            calculate_total_score_ui_only()
+            page.close(bonus_calc_dialog)
+            page.update()
+        except ValueError:
+            show_alert("数字のみ入力してください。")
+
+    # 💡 7. メインの計算ダイアログ（絶対に押し出されない2カラム縦並び構造）
+    bonus_calc_dialog = ft.AlertDialog(
+        title=ft.Text("🃏 カード・ボーナス点の計算"),
+        content=ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    # 【左列】入力フィールドを完全に縦並びにする
+                    ft.Column([
+                        calc_jobs_input,
+                        calc_minor_input,
+                        calc_major_input,
+                        calc_other_input
+                    ], spacing=12),
+                    
+                    # 【右列】連動する個別リスト用のボタンを完全に縦並びにする（その他の横はスペースで埋める）
+                    ft.Column([
+                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"), height=45),
+                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"), height=45),
+                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"), height=45),
+                        ft.Container(width=40, height=45)  # その他欄の横は空白の板を置いてズレを防止
+                    ], spacing=12, alignment=ft.MainAxisAlignment.START)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
+                
+                ft.Divider(height=15),
+                calc_total_text
+            ], tight=True),
+            width=270,   # 幅をさらにコンパクトにして450pxの画面に絶対収まるように設計
+            height=300
+        ),
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
+            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
