@@ -786,56 +786,61 @@ def main(page: ft.Page):
         ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
 
-        # 💡 追加：ボーナス計算用の入力欄
-    calc_cards_input = ft.TextField(label="🃏 進歩カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
+    # 💡 修正：ご希望の順番（職業 → 小さい進歩 → 大きい進歩 → その他）に並び替え
     calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
+    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
+    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
 
-    # 💡 追加：入力されるたびにダイアログ内でリアルタイムに合計を計算する関数
+    # 💡 入力されるたびにダイアログ内でリアルタイムに合計を計算する関数
     def refresh_dialog_total(e):
         try:
-            cards = int(calc_cards_input.value) if calc_cards_input.value else 0
             jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
+            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
+            major = int(calc_major_input.value) if calc_major_input.value else 0
             other = int(calc_other_input.value) if calc_other_input.value else 0
-            calc_total_text.value = f"計算結果: {cards + jobs + other} 点"
+            calc_total_text.value = f"計算結果: {jobs + minor + major + other} 点"
         except ValueError:
             calc_total_text.value = "有効な数字を入力してください"
         page.update()
 
-    # 変更をトリガーに設定
-    calc_cards_input.on_change = refresh_dialog_total
+    # 変更イベントの紐付け
     calc_jobs_input.on_change = refresh_dialog_total
+    calc_minor_input.on_change = refresh_dialog_total
+    calc_major_input.on_change = refresh_dialog_total
     calc_other_input.on_change = refresh_dialog_total
 
-    # 💡 追加：確定ボタンを押した時の処理
+    # 💡 確定ボタンを押した時の処理
     def handle_confirm_bonus(e):
         try:
-            cards = int(calc_cards_input.value) if calc_cards_input.value else 0
             jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
+            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
+            major = int(calc_major_input.value) if calc_major_input.value else 0
             other = int(calc_other_input.value) if calc_other_input.value else 0
             
             # メインのデータ構造に保存して画面を再計算
-            counts["bonus_calc_points"] = cards + jobs + other
+            counts["bonus_calc_points"] = jobs + minor + major + other
             calculate_total_score_ui_only()
             page.close(bonus_calc_dialog)
             page.update()
         except ValueError:
             show_alert("数字のみ入力してください。")
 
-    # 💡 追加：計算ダイアログ本体
+    # 💡 計算ダイアログ本体（表示する高さも少し広げました）
     bonus_calc_dialog = ft.AlertDialog(
         title=ft.Text("🃏 カード・ボーナス点の計算"),
         content=ft.Container(
             content=ft.Column([
-                calc_cards_input,
                 calc_jobs_input,
+                calc_minor_input,
+                calc_major_input,
                 calc_other_input,
                 ft.Divider(),
                 calc_total_text
             ], spacing=10, tight=True),
             width=320,
-            height=280
+            height=340  # 💡 項目が1つ増えたため高さを340に調整
         ),
         actions=[
             ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
@@ -843,7 +848,6 @@ def main(page: ft.Page):
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
-
     
     change_group_dialog = ft.AlertDialog(
         title=ft.Text("🔢 グループ番号の管理"),
@@ -970,15 +974,15 @@ def main(page: ft.Page):
                     create_agricola_selector("👨‍👩‍👧 家族の人数", "family", ft.Colors.BLUE_400),
                     create_agricola_selector("🥺 乞食カードの枚数", "begging_card", ft.Colors.RED_700),
                     
-                    # 💡 修正：古い2つの項目を消し、ここに計算ダイアログを開くボタンを設置
+                    # 💡 修正：ボタンを押した時に4つの入力欄をすべて「0」にリセットして開く
                     ft.Container(
                         content=ft.ElevatedButton(
                             "🃏 カード・ボーナス点を計算する",
                             icon=ft.Icons.CALCULATE_OUTLINED,
                             on_click=lambda e: (
-                                # 開く時に入力欄を初期化（または現在の値をセット）
-                                setattr(calc_cards_input, "value", "0"),
                                 setattr(calc_jobs_input, "value", "0"),
+                                setattr(calc_minor_input, "value", "0"),
+                                setattr(calc_major_input, "value", "0"),
                                 setattr(calc_other_input, "value", "0"),
                                 setattr(calc_total_text, "value", "計算結果: 0 点"),
                                 page.open(bonus_calc_dialog)
