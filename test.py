@@ -786,14 +786,67 @@ def main(page: ft.Page):
         ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700,
                           color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
 
-    # 💡 修正：ご希望の順番（職業 → 小さい進歩 → 大きい進歩 → その他）に並び替え
-    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
+    # 💡 職業の個別入力用データを保持するリスト
+    individual_jobs = []  # 例: [{"name": "○○", "score": 3}, ...]
+
+    # 各種TextFieldの定義
+    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
     calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
 
-    # 💡 入力されるたびにダイアログ内でリアルタイムに合計を計算する関数
+    # 💡 個別入力用ダイアログのコンポーネント
+    job_name_input = ft.TextField(label="職業カード名（任意）", hint_text="例: 畑追い")
+    job_score_input = ft.TextField(label="得点/ボーナス点", value="1", keyboard_type=ft.KeyboardType.NUMBER)
+    jobs_list_view = ft.ListView(expand=True, spacing=5, height=120)
+
+    # 💡 職業の個別リストから合計を計算してメイン入力欄に反映する関数
+    def refresh_individual_jobs_total():
+        jobs_list_view.controls.clear()
+        total_job_score = 0
+        
+        for idx, item in enumerate(individual_jobs):
+            total_job_score += item["score"]
+            display_text = f"{item['name']} ({item['score']}点)" if item["name"] else f"職業 {idx+1} ({item['score']}点)"
+            
+            jobs_list_view.controls.append(
+                ft.Row([
+                    ft.Text(display_text, expand=True, size=13),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINED,
+                        icon_color=ft.Colors.RED_400,
+                        icon_size=20,
+                        on_click=lambda e, i=idx: remove_individual_job(i)
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            )
+            
+        calc_jobs_input.value = str(total_job_score)
+        refresh_dialog_total(None)
+
+    # 💡 職業を個別リストに追加する処理
+    def add_individual_job(e):
+        try:
+            score = int(job_score_input.value) if job_score_input.value else 0
+            name = job_name_input.value.strip()
+            individual_jobs.append({"name": name, "score": score})
+            
+            # 入力欄のリセット
+            job_name_input.value = ""
+            job_score_input.value = "1"
+            
+            refresh_individual_jobs_total()
+        except ValueError:
+            show_alert("得点には数字を入力してください。")
+
+    # 💡 職業を個別リストから削除する処理
+    def remove_individual_job(index):
+        if 0 <= index < len(individual_jobs):
+            individual_jobs.pop(index)
+            refresh_individual_jobs_total()
+
+    # 💡 ダイアログ全体のリアルタイム合計計算
     def refresh_dialog_total(e):
         try:
             jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
@@ -811,7 +864,27 @@ def main(page: ft.Page):
     calc_major_input.on_change = refresh_dialog_total
     calc_other_input.on_change = refresh_dialog_total
 
-    # 💡 確定ボタンを押した時の処理
+    # 💡 個別入力用サブダイアログ
+    job_detail_dialog = ft.AlertDialog(
+        title=ft.Text("👨‍🍳 職業の個別入力リスト"),
+        content=ft.Container(
+            content=ft.Column([
+                ft.Row([job_name_input, job_score_input], spacing=10),
+                ft.ElevatedButton("職業を追加する", icon=ft.Icons.ADD, on_click=add_individual_job, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE, width=320),
+                ft.Divider(),
+                ft.Text("追加済みの職業一覧:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                jobs_list_view
+            ], spacing=10, tight=True),
+            width=320,
+            height=320
+        ),
+        actions=[
+            ft.ElevatedButton("閉じてメインに戻る", on_click=lambda e: page.close(job_detail_dialog), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+
+    # 確定ボタンを押した時の処理
     def handle_confirm_bonus(e):
         try:
             jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
@@ -819,7 +892,6 @@ def main(page: ft.Page):
             major = int(calc_major_input.value) if calc_major_input.value else 0
             other = int(calc_other_input.value) if calc_other_input.value else 0
             
-            # メインのデータ構造に保存して画面を再計算
             counts["bonus_calc_points"] = jobs + minor + major + other
             calculate_total_score_ui_only()
             page.close(bonus_calc_dialog)
@@ -827,20 +899,29 @@ def main(page: ft.Page):
         except ValueError:
             show_alert("数字のみ入力してください。")
 
-    # 💡 計算ダイアログ本体（表示する高さも少し広げました）
+    # 💡 メインの計算ダイアログ（職業の横に個別入力ボタンを配置）
     bonus_calc_dialog = ft.AlertDialog(
         title=ft.Text("🃏 カード・ボーナス点の計算"),
         content=ft.Container(
             content=ft.Column([
-                calc_jobs_input,
+                # 職業入力欄の横に個別リストを開くボタンを配置
+                ft.Row([
+                    calc_jobs_input,
+                    ft.IconButton(
+                        icon=ft.Icons.LIST_ALT_OUTLINED, 
+                        tooltip="個別にリスト入力する",
+                        icon_color=ft.Colors.BLUE_600,
+                        on_click=lambda e: page.open(job_detail_dialog)
+                    )
+                ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 calc_minor_input,
                 calc_major_input,
                 calc_other_input,
                 ft.Divider(),
                 calc_total_text
             ], spacing=10, tight=True),
-            width=320,
-            height=340  # 💡 項目が1つ増えたため高さを340に調整
+            width=340,
+            height=340
         ),
         actions=[
             ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
@@ -974,12 +1055,14 @@ def main(page: ft.Page):
                     create_agricola_selector("👨‍👩‍👧 家族の人数", "family", ft.Colors.BLUE_400),
                     create_agricola_selector("🥺 乞食カードの枚数", "begging_card", ft.Colors.RED_700),
                     
-                    # 💡 修正：ボタンを押した時に4つの入力欄をすべて「0」にリセットして開く
+                    # 💡 修正：メイン画面のボタン。開く時に個別入力用の内部リストもクリアします
                     ft.Container(
                         content=ft.ElevatedButton(
                             "🃏 カード・ボーナス点を計算する",
                             icon=ft.Icons.CALCULATE_OUTLINED,
                             on_click=lambda e: (
+                                individual_jobs.clear(),  # 💡 個別リストを初期化
+                                jobs_list_view.controls.clear(),
                                 setattr(calc_jobs_input, "value", "0"),
                                 setattr(calc_minor_input, "value", "0"),
                                 setattr(calc_major_input, "value", "0"),
