@@ -796,9 +796,19 @@ def main(page: ft.Page):
     calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
     calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
 
-    # 💡 個別入力用ダイアログのコンポーネント
-    job_name_input = ft.TextField(label="職業カード名（任意）", hint_text="例: 畑追い")
-    job_score_input = ft.TextField(label="得点/ボーナス点", value="1", keyboard_type=ft.KeyboardType.NUMBER)
+    # 💡 修正：職業名（広く）と得点（狭く）の比率を expand で調整し、枠内にうまく収まるようにしました
+    job_name_input = ft.TextField(
+        label="職業カード名（任意）", 
+        hint_text="例: 畑追い", 
+        expand=3  # 💡 横幅の比率を大きく（3割分）
+    )
+    job_score_input = ft.TextField(
+        label="得点", 
+        value="1", 
+        keyboard_type=ft.KeyboardType.NUMBER, 
+        expand=1,  # 💡 横幅の比率を小さく（1割分）
+        text_align=ft.TextAlign.CENTER
+    )
     jobs_list_view = ft.ListView(expand=True, spacing=5, height=120)
 
     # 💡 職業の個別リストから合計を計算してメイン入力欄に反映する関数
@@ -864,25 +874,28 @@ def main(page: ft.Page):
     calc_major_input.on_change = refresh_dialog_total
     calc_other_input.on_change = refresh_dialog_total
 
-    # 💡 個別入力用サブダイアログ
+    # 💡 個別入力用サブダイアログ（レイアウトの微調整）
     job_detail_dialog = ft.AlertDialog(
         title=ft.Text("👨‍🍳 職業の個別入力リスト"),
         content=ft.Container(
             content=ft.Column([
-                ft.Row([job_name_input, job_score_input], spacing=10),
+                # 💡 Rowに拡張設定を入れることで、上記のexpand比率（3:1）の通り綺麗に横幅に収まります
+                ft.Row([job_name_input, job_score_input], spacing=10, expand=False),
+                ft.Container(height=2), # 少し隙間を調整
                 ft.ElevatedButton("職業を追加する", icon=ft.Icons.ADD, on_click=add_individual_job, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE, width=320),
                 ft.Divider(),
                 ft.Text("追加済みの職業一覧:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
                 jobs_list_view
             ], spacing=10, tight=True),
             width=320,
-            height=320
+            height=340 # 💡 リストが見やすくなるよう高さを少しだけ広げました
         ),
         actions=[
             ft.ElevatedButton("閉じてメインに戻る", on_click=lambda e: page.close(job_detail_dialog), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
         ],
         actions_alignment=ft.MainAxisAlignment.END
     )
+
 
     # 確定ボタンを押した時の処理
     def handle_confirm_bonus(e):
