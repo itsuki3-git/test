@@ -791,14 +791,14 @@ def main(page: ft.Page):
     individual_minors = []  # 小さい進歩
     individual_majors = []  # 大きい進歩
 
-    # メインダイアログ用のTextField定義
-    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-    calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER)
+    # メインダイアログ用のTextField定義（💡 width=240 で横幅を固定し、アイコンを押し出さないように修正）
+    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
+    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
+    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
+    calc_other_input = ft.TextField(label="🎁 その他のボーナス点", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=240)
     calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
 
-    # サブダイアログ用の入力コンポーネント（3つで使い回すため汎用的な名前に変更）
+    # サブダイアログ用の入力コンポーネント（3:1 の黄金比率で綺麗に収まります）
     card_name_input = ft.TextField(label="カード名（任意）", hint_text="例: 畑追い", expand=3)
     card_score_input = ft.TextField(label="得点", value="1", keyboard_type=ft.KeyboardType.NUMBER, expand=1, text_align=ft.TextAlign.CENTER)
     detail_list_view = ft.ListView(expand=True, spacing=5, height=120)
@@ -811,7 +811,6 @@ def main(page: ft.Page):
     def refresh_individual_total():
         detail_list_view.controls.clear()
         
-        # 現在編集中のタイプに合わせてデータを切り替え
         if current_edit_type == "jobs":
             target_list = individual_jobs
             target_input = calc_jobs_input
@@ -939,6 +938,64 @@ def main(page: ft.Page):
         actions_alignment=ft.MainAxisAlignment.END
     )
 
+    # 確定ボタンを押した時の処理
+    def handle_confirm_bonus(e):
+        try:
+            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
+            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
+            major = int(calc_major_input.value) if calc_major_input.value else 0
+            other = int(calc_other_input.value) if calc_other_input.value else 0
+            
+            counts["bonus_calc_points"] = jobs + minor + major + other
+            calculate_total_score_ui_only()
+            page.close(bonus_calc_dialog)
+            page.update()
+        except ValueError:
+            show_alert("数字のみ入力してください。")
+
+    # 💡 7. メインの計算ダイアログ
+    bonus_calc_dialog = ft.AlertDialog(
+        title=ft.Text("🃏 カード・ボーナス点の計算"),
+        content=ft.Container(
+            content=ft.Column([
+                # 👨‍🍳 職業（Row全体の横並びが崩れないよう調整）
+                ft.Row([
+                    calc_jobs_input,
+                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                
+                # 🃏 小さい進歩
+                ft.Row([
+                    calc_minor_input,
+                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                
+                # 🏛️ 大きい進歩
+                ft.Row([
+                    calc_major_input,
+                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                
+                # 🎁 その他（横幅を揃えるためにRowで包む）
+                ft.Row([calc_other_input], alignment=ft.MainAxisAlignment.START),
+                
+                ft.Divider(),
+                calc_total_text
+            ], 
+            spacing=10, 
+            tight=True,
+            scroll=ft.ScrollMode.AUTO
+            ),
+            width=320,
+            height=400
+        ),
+        actions=[
+            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
+            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
+    )
+    
     # 確定ボタンを押した時の処理
     def handle_confirm_bonus(e):
         try:
