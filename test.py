@@ -803,7 +803,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（タップ判定を遮断していたレイヤー構造を完全修正）
+    # 📊 マイページ履歴一覧の生成（タップのすり抜け・無反応バグを完全消滅）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -819,18 +819,19 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ タップ時に関数を安全にキックするラッパー
                 def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # 💡【超重要修正】判定を遮断させないため、GestureDetectorを一番外側（親）に変更！
-                # これにより、Containerの色やパディングに邪魔されず、カード全体のタップが100%通ります。
+                # 💡【タップ不発バグの根本治療】
+                # behavior=ft.HitTestBehavior.OPAQUE を指定することで、
+                # カード内の文字がない隙間（空白部分）を押しても、100%確実にタップとして検知させます！
                 my_records_list.controls.append(
                     ft.GestureDetector(
-                        on_tap=make_load_click(), # 一番外側でタップを確実にキャッチ
+                        on_tap=make_load_click(),
+                        behavior=ft.HitTestBehavior.OPAQUE, # ⭕ 空白を触っても確実に反応
                         content=ft.Container(
                             padding=12, 
                             border=ft.border.all(1, ft.Colors.BLUE_100), 
@@ -847,7 +848,6 @@ def main(page: ft.Page):
                     )
                 )
             page.update()
-
 
     # =========================================================================
     # 📊 マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
@@ -980,7 +980,7 @@ def main(page: ft.Page):
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
 
-        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1076,7 +1076,7 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                target_dialog.open = False # 💡 ダイアログを閉じる
+                target_dialog.open = False 
                 page.update()
                 update_my_records_ui()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
@@ -1084,7 +1084,7 @@ def main(page: ft.Page):
             except Exception as ex:
                 show_alert(f"保存に失敗しました: {ex}")
 
-        # --- 6. UIのグリッド構築 ---
+            # --- 6. UIのグリッド構築 ---
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
         card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
@@ -1119,8 +1119,8 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         
-        # ⭕【最重要・出力バグ完全除去】
-        # page.openが効かない古い・あるいはWEB上のFlet環境でも、100%確実に描画させるクラシック命令
+        # ⭕【出力バグ完全除去】
+        # page.openが反応しない環境でも100%確実に描画・出現させるクラシック命令
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
