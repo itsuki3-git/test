@@ -1,9 +1,9 @@
 import hashlib
 import os
+import datetime
 from datetime import datetime, timezone, timedelta
 import flet as ft
 from supabase import create_client, Client
-
 
 def main(page: ft.Page):
     page.title = "アグリコラ得点計算 & プレイヤー管理"
@@ -23,16 +23,36 @@ def main(page: ft.Page):
     current_player = None
     my_group_list = []
     
-        # 🌾 修正：countsの中から card_points と bonus_points を削除し、合算用を追加
-    counts = {
-        "field": 0, "pasture": 0, "grain": 0, "vegetable": 0,
-        "sheep": 0, "wild_boar": 0, "cattle": 0, "empty_space": 0,
-        "stable": 0, "room_type": "clay", "room_count": 0,
-        "family": 2, "begging_card": 0,
-        "bonus_calc_points": 0  # 💡 新しく追加したカード・ボーナス合算点
-    }
+    # 牧場管理グリッド用の定数設定
+    CELL_W, CELL_H = 65, 65
+    ROWS, COLS = 3, 5
+    LINE_THICK = 4
+    HIT_BOX_EXT = 14
+    OFFSET = HIT_BOX_EXT
+    TOTAL_W = CELL_W * COLS + (OFFSET * 2)
+    TOTAL_H = CELL_H * ROWS + (OFFSET * 2)
 
+    current_mode = "COLOR"
     
+    PALETTE_INFO = [
+        {"name": "木の家", "color": ft.Colors.GREEN_400},
+        {"name": "レンガの家", "color": ft.Colors.DEEP_ORANGE_700},
+        {"name": "石の家", "color": ft.Colors.GREY_900},
+        {"name": "畑", "color": ft.Colors.AMBER_500},
+        {"name": "厩", "color": ft.Colors.LIGHT_BLUE_300},
+    ]
+    
+    selected_color = PALETTE_INFO[0]["color"]
+
+    horiz_line_dict = {}
+    vert_line_dict = {}
+    cell_dict = {}
+
+    # 入力数値を管理する辞書（統合版）
+    agri_inputs = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
+    card_inputs = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
+    card_details = {"職業": [], "小さい進歩": [], "大きい進歩": []}
+
     STORAGE_REMEMBER_USER = "fruit_app_remembered_user"
     STORAGE_REMEMBER_PASS = "fruit_app_remembered_pass"
 
@@ -46,28 +66,12 @@ def main(page: ft.Page):
                                   bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=140, height=45)
 
     forgot_name_input = ft.TextField(label="プレイヤー名を入力")
-    forgot_question_text = ft.Text(value="プレイヤー名を入力して「質問を確認」を押してください",
-                                   color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
+    forgot_question_text = ft.Text(value="プレイヤー名を入力して「質問を確認」を押してください", color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
     forgot_answer_input = ft.TextField(label="質問の答えを入力")
     forgot_new_pass_input = ft.TextField(label="新しいパスワード (4桁以上)", password=True, can_reveal_password=True)
 
     logged_in_user_text = ft.Text(value="", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800)
     score_display = ft.Text(value="0", size=48, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_600)
-
-    # 各要素の入力数値を画面中央にリアルタイム同期するTextマップ
-    ui_text_map = {k: ft.Text(value="2" if k == "family" else "0", size=16, weight=ft.FontWeight.BOLD, width=30, text_align=ft.TextAlign.CENTER) for k in counts}
-
-    # 🌾 修正: show_selected_icon=False を追加してチェックマークを非表示にしました
-    room_type_switch = ft.SegmentedButton(
-        selected={"clay"},
-        show_selected_icon=False, # 💡 ここを追加してチェック（✓）を消しました
-        segments=[
-            ft.Segment(value="clay", label=ft.Text("レンガ", size=12)),
-            ft.Segment(value="stone", label=ft.Text("石", size=12)),
-        ],
-        on_change=lambda e: handle_room_type_change(e)
-    )
-
 
     edit_name_input = ft.TextField(label="名前を編集", expand=True)
     group_inputs_container = ft.Column(spacing=10)
@@ -78,12 +82,10 @@ def main(page: ft.Page):
     mypage_question_input = ft.TextField(label="新しく登録する「秘密の質問」", hint_text="例: 初めて飼ったペットの名前は？")
     mypage_answer_input = ft.TextField(label="質問の答え", hint_text="答えを入力してください")
 
-    # 🏆 ランキング用コンポーネント
     ranking_title_text = ft.Text(value="🏆 ハイスコアランキング", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_700)
     ranking_group_dropdown = ft.Dropdown(label="グループ切り替え", width=160, options=[], on_change=lambda e: update_ranking_ui())
     ranking_list = ft.ListView(expand=True, spacing=10, padding=10)
 
-    # 定義順エラー回避用の空定義
     authenticated_view = None
 
     def show_alert(message, title="エラー"):
@@ -98,111 +100,157 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 🌾 1. アグリコラ各項目のUI生成関数（スマホ最適化版）
-    def create_agricola_selector(label, key, color):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Container(content=ft.Text(label, size=13, weight=ft.FontWeight.BOLD, no_wrap=True), width=110, alignment=ft.alignment.center_left),
-                    ft.Row(
-                        controls=[
-                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, -3)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, -1)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ui_text_map[key], width=30, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, 1)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count(key, 3)), width=38, alignment=ft.alignment.center)
-                        ], spacing=0, alignment=ft.MainAxisAlignment.END
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ), padding=4, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
-        )
+    # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
+    def analyze_grid():
+        visited = { (r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1) }
+        queue = []
+        for r in range(-1, ROWS + 1):
+            for c in range(-1, COLS + 1):
+                if r == -1 or r == ROWS or c == -1 or c == COLS:
+                    visited[(r, c)] = True
+                    queue.append((r, c))
 
-    # 🌾 2. アグリコラ公式段階的得点テーブル
-    def get_agricola_score(key, value):
-        if key == "field":
-            if value <= 1: return -1
-            elif value == 2: return 1
-            elif value == 3: return 2
-            elif value == 4: return 3
-            else: return 4
-        elif key == "pasture":
-            if value == 0: return -1
-            elif value == 1: return 1
-            elif value == 2: return 2
-            elif value == 3: return 3
-            else: return 4
-        elif key == "grain":
-            if value == 0: return -1
-            elif value <= 3: return 1
-            elif value <= 5: return 2
-            elif value <= 7: return 3
-            else: return 4
-        elif key == "vegetable":
-            if value == 0: return -1
-            elif value == 1: return 1
-            elif value == 2: return 2
-            elif value == 3: return 3
-            else: return 4
-        elif key == "sheep":
-            if value == 0: return -1
-            elif value <= 3: return 1
-            elif value <= 5: return 2
-            elif value <= 7: return 3
-            else: return 4
-        elif key == "wild_boar":
-            if value == 0: return -1
-            elif value <= 2: return 1
-            elif value <= 4: return 2
-            elif value <= 6: return 3
-            else: return 4
-        elif key == "cattle":
-            if value == 0: return -1
-            elif value == 1: return 1
-            elif value <= 3: return 2
-            elif value <= 5: return 3
-            else: return 4
-        elif key == "empty_space": return value * -1
-        elif key == "stable": return value * 1
-        elif key == "room_count":
-            multiplier = 2 if counts["room_type"] == "stone" else 1
-            return value * multiplier
-        elif key == "family": return value * 3
-        elif key == "begging_card": return value * -3
-        elif key == "bonus_calc_points": return value
-        return 0
+        while queue:
+            curr_r, curr_c = queue.pop(0)
+            if curr_r > -1:
+                if 0 <= curr_r < ROWS + 1 and 0 <= curr_c < COLS:
+                    if horiz_line_dict[(curr_r, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r - 1, curr_c)]:
+                            visited[(curr_r - 1, curr_c)] = True
+                            queue.append((curr_r - 1, curr_c))
+            if curr_r < ROWS:
+                if 0 <= curr_r + 1 < ROWS + 1 and 0 <= curr_c < COLS:
+                    if horiz_line_dict[(curr_r + 1, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r + 1, curr_c)]:
+                            visited[(curr_r + 1, curr_c)] = True
+                            queue.append((curr_r + 1, curr_c))
+            if curr_c > -1:
+                if 0 <= curr_c < COLS + 1 and 0 <= curr_r < ROWS:
+                    if vert_line_dict[(curr_c, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r, curr_c - 1)]:
+                            visited[(curr_r, curr_c - 1)] = True
+                            queue.append((curr_r, curr_c - 1))
+            if curr_c < COLS:
+                if 0 <= curr_c + 1 < COLS + 1 and 0 <= curr_r < ROWS:
+                    if vert_line_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r, curr_c + 1)]:
+                            visited[(curr_r, curr_c + 1)] = True
+                            queue.append((curr_r, curr_c + 1))
+
+        unused_count = 0
+        for r in range(ROWS):
+            for c in range(COLS):
+                if visited[(r, c)] and cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100:
+                    unused_count += 1
+
+        ranch_count = 0
+        ranch_with_stable_count = 0
+        for r in range(ROWS):
+            for c in range(COLS):
+                if not visited[(r, c)]:
+                    ranch_count += 1
+                    inner_queue = [(r, c)]
+                    visited[(r, c)] = True
+                    has_stable = False
+                    while inner_queue:
+                        curr_r, curr_c = inner_queue.pop(0)
+                        if cell_dict[(curr_r, curr_c)].bgcolor == ft.Colors.LIGHT_BLUE_300:
+                            has_stable = True
+                        if curr_r > 0 and horiz_line_dict[(curr_r, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r - 1, curr_c)]:
+                                visited[(curr_r - 1, curr_c)] = True
+                                inner_queue.append((curr_r - 1, curr_c))
+                        if curr_r < ROWS - 1 and horiz_line_dict[(curr_r + 1, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r + 1, curr_c)]:
+                                visited[(curr_r + 1, curr_c)] = True
+                                inner_queue.append((curr_r + 1, curr_c))
+                        if curr_c > 0 and vert_line_dict[(curr_c, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r, curr_c - 1)]:
+                                visited[(curr_r, curr_c - 1)] = True
+                                inner_queue.append((curr_r, curr_c - 1))
+                        if curr_c < COLS - 1 and vert_line_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r, curr_c + 1)]:
+                                visited[(curr_r, curr_c + 1)] = True
+                                inner_queue.append((curr_r, curr_c + 1))
+                    if has_stable:
+                        ranch_with_stable_count += 1
+
+        return ranch_count, unused_count, ranch_with_stable_count
+
+    def get_agri_subtotal():
+        sub_total = 0
+        for name, count in agri_inputs.items():
+            score = -1
+            if name == "小麦":
+                if count == 0: score = -1
+                elif 1 <= count <= 3: score = 1
+                elif 4 <= count <= 5: score = 2
+                elif 6 <= count <= 7: score = 3
+                else: score = 4
+            elif name == "野菜":
+                if count == 0: score = -1
+                elif count == 1: score = 1
+                elif count == 2: score = 2
+                elif count == 3: score = 3
+                else: score = 4
+            elif name == "羊":
+                if count == 0: score = -1
+                elif 1 <= count <= 3: score = 1
+                elif 4 <= count <= 5: score = 2
+                elif 6 <= count <= 7: score = 3
+                else: score = 4
+            elif name == "猪":
+                if count == 0: score = -1
+                elif 1 <= count <= 2: score = 1
+                elif 3 <= count <= 4: score = 2
+                elif 5 <= count <= 6: score = 3
+                else: score = 4
+            elif name == "牛":
+                if count == 0: score = -1
+                elif count == 1: score = 1
+                elif 2 <= count <= 3: score = 2
+                elif 4 <= count <= 5: score = 3
+                else: score = 4
+            elif name == "家族の数": score = count * 3
+            elif name == "乞食の枚数": score = count * -3
+            sub_total += score
+        return sub_total
+
+    def get_grand_total():
+        counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
+        for cell in cell_dict.values():
+            for info in PALETTE_INFO:
+                if info["name"] in counts and cell.bgcolor == info["color"]:
+                    counts[info["name"]] += 1
+        ranch_c, unused_c, ranch_stable = analyze_grid()
+        field_count = counts["畑"]
+        if field_count <= 1: field_score = -1
+        elif field_count == 2: field_score = 1
+        elif field_count == 3: field_score = 2
+        elif field_count == 4: field_score = 3
+        else: field_score = 4
+
+        if ranch_c == 0: ranch_score = -1
+        elif ranch_c <= 4: ranch_score = ranch_c
+        else: ranch_score = 4
+
+        stable_score = min(ranch_stable, 4) if ranch_stable > 0 else 0
+        house_score = (counts["レンガの家"] * 1) + (counts["石の家"] * 2)
+        unused_score = unused_c * -1
+        
+        table1_total = field_score + ranch_score + stable_score + house_score + unused_score
+        table2_total = get_agri_subtotal()
+        table3_total = sum(card_inputs.values())
+        return table1_total + table2_total + table3_total
+
+    def refresh_grand_total_labels():
+        gt = get_grand_total()
+        score_display.value = str(gt)
 
     def calculate_total_score_ui_only():
-        total = sum(get_agricola_score(k, v) for k, v in counts.items())
-        score_display.value = str(total)
-        return total
-
-    def handle_room_type_change(e):
-        counts["room_type"] = list(e.selection)[0] if e.selection else "clay"
-        calculate_total_score_ui_only()
-        page.update()
-
-    def adjust_count(key, delta):
-        new_count = counts[key] + delta
-        if key in ["card_points", "bonus_points"] or new_count >= 0:
-            counts[key] = new_count
-            ui_text_map[key].value = str(new_count)
-            calculate_total_score_ui_only()
-            page.update()
-
-    def reset_current_game(e):
-        for k in counts:
-            if k == "family":
-                counts[k] = 2
-                ui_text_map[k].value = "2"
-            elif k == "room_type":
-                counts[k] = "clay"
-                room_type_switch.selected = {"clay"}
-            else:
-                counts[k] = 0
-                if k in ui_text_map:
-                    ui_text_map[k].value = "0"
-        calculate_total_score_ui_only()
-        if e: page.update()
+        gt = get_grand_total()
+        score_display.value = str(gt)
+        return gt
 
     def update_all_uis():
         update_my_records_ui()
@@ -234,13 +282,13 @@ def main(page: ft.Page):
 
     def save_current_game(e):
         if not current_player: return
-        total_score = calculate_total_score_ui_only()
+        total_score = get_grand_total()
         try:
             supabase.table("records").insert({"player": current_player, "final_score": total_score, "date": get_jst_now_str()}).execute()
         except Exception as ex:
             show_alert(f"記録保存失敗: {ex}")
             return
-        reset_current_game(None)
+        reset_current_game()
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
         page.update()
@@ -251,70 +299,268 @@ def main(page: ft.Page):
         except Exception: return
         update_all_uis()
 
-    def refresh_ranking_dropdown_options():
-        ranking_group_dropdown.options.clear()
-        try:
-            if current_player == "admin":
-                privacy_res = supabase.table("privacy").select("group_number").execute()
-                detected_groups = {0}
-                if privacy_res.data:
-                    for row in privacy_res.data:
-                        g_str = str(row.get("group_number", "1"))
-                        for token in g_str.replace("，", ",").split(","):
-                            if (t := token.strip()).isdigit(): detected_groups.add(int(t))
-                for g in sorted(list(detected_groups)):
-                    label_text = "グループ 0 (管理者)" if g == 0 else f"グループ {g}"
-                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
-                ranking_group_dropdown.value = "0"
-            else:
-                for g in sorted(my_group_list):
-                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
-        except Exception:
-            ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
-            ranking_group_dropdown.value = "1"
+    def update_data_table(ranch_count, unused_count, ranch_stable_count):
+        counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
+        for cell in cell_dict.values():
+            for info in PALETTE_INFO:
+                if info["name"] in counts and cell.bgcolor == info["color"]:
+                    counts[info["name"]] += 1
+
+        rows = []
+        total_score = 0
+        field_count = counts["畑"]
+        if field_count <= 1: field_score = -1
+        elif field_count == 2: field_score = 1
+        elif field_count == 3: field_score = 2
+        elif field_count == 4: field_score = 3
+        else: field_score = 4
+
+        total_score += field_score
+        rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("畑", size=14, weight="bold", color=ft.Colors.AMBER_700)), ft.DataCell(ft.Text(f"{field_count} 個", size=14)), ft.DataCell(ft.Text(f"{field_score} 点", size=14, weight="bold"))]))
+
+        if ranch_count == 0: ranch_score = -1
+        elif ranch_count <= 4: ranch_score = ranch_count
+        else: ranch_score = 4
+
+        total_score += ranch_score
+        rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("牧場", size=14, weight="bold", color=ft.Colors.BROWN_700)), ft.DataCell(ft.Text(f"{ranch_count} つ", size=14)), ft.DataCell(ft.Text(f"{ranch_score} 点", size=14, weight="bold"))]))
+    
+        limited_ranch_stable_count = min(ranch_stable_count, 4)
+        if ranch_stable_count > 0:
+            score = limited_ranch_stable_count
+            total_score += score
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("厩", size=14, weight="bold", color=ft.Colors.LIGHT_BLUE_700)), ft.DataCell(ft.Text(f"{ranch_stable_count} つ", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
+        
+        for info in PALETTE_INFO:
+            name = info["name"]
+            if name not in counts or name == "畑": continue
+            count = counts[name]
+            if count > 0:
+                score = count * 1 if name == "レンガの家" else (count * 2 if name == "石の家" else 0)
+                total_score += score
+                rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=info["color"] if info["color"] != ft.Colors.GREEN_400 else ft.Colors.GREEN_700)), ft.DataCell(ft.Text(f"{count} 個", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
+        
+        if unused_count > 0:
+            score = unused_count * -1
+            total_score += score
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("未使用", size=14, color=ft.Colors.BLUE_GREY_600)), ft.DataCell(ft.Text(f"{unused_count} マス", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
+
+        count_table.rows = rows
+
+    def update_data_table2():
+        rows = []
+        for name, count in agri_inputs.items():
+            score = -1
+            text_color = ft.Colors.BLACK
+            if name == "小麦": text_color = ft.Colors.AMBER_700
+            elif name == "野菜": text_color = ft.Colors.DEEP_ORANGE_700
+            elif name == "羊": text_color = ft.Colors.BLUE_GREY_500
+            elif name == "家族の数": text_color = ft.Colors.BLUE_700
+            elif name == "乞食の枚数": text_color = ft.Colors.RED_700
+
+            if name == "小麦":
+                if count == 0: score = -1
+                elif count <= 3: score = 1
+                elif count <= 5: score = 2
+                elif count <= 7: score = 3
+                else: score = 4
+            elif name == "野菜":
+                if count == 0: score = -1
+                elif count == 1: score = 1
+                elif count == 2: score = 2
+                elif count == 3: score = 3
+                else: score = 4
+            elif name == "羊":
+                if count == 0: score = -1
+                elif count <= 3: score = 1
+                elif count <= 5: score = 2
+                elif count <= 7: score = 3
+                else: score = 4
+            elif name == "猪":
+                if count == 0: score = -1
+                elif count <= 2: score = 1
+                elif count <= 4: score = 2
+                elif count <= 6: score = 3
+                else: score = 4
+            elif name == "牛":
+                if count == 0: score = -1
+                elif count == 1: score = 1
+                elif count <= 3: score = 2
+                elif count <= 5: score = 3
+                else: score = 4
+            elif name == "家族の数": score = count * 3
+            elif name == "乞食の枚数": score = count * -3
+
+            input_field = ft.TextField(value=str(count), width=50, height=30, text_size=12, content_padding=3, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_input_change(k, e.control.value))
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
+        count_table2.rows = rows
+
+    def close_dialog(e):
+        page.close(page.dialog)
+
+    def show_card_dialog(name):
+        dialog_items_container = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, height=200)
+
+        def refresh_dialog_ui():
+            dialog_items_container.controls.clear()
+            for idx, item in enumerate(card_details[name]):
+                if name == "大きい進歩":
+                    options_list = [
+                        ft.dropdown.Option("かまど"), ft.dropdown.Option("調理場"),
+                        ft.dropdown.Option("井井戸"), ft.dropdown.Option("レンガ窯"),
+                        ft.dropdown.Option("石窯"), ft.dropdown.Option("家具製作所"),
+                        ft.dropdown.Option("製陶所"), ft.dropdown.Option("カゴ製作所")
+                    ]
+                    default_scores = {
+                        "かまど": 1, "調理場": 1, "井戸": 4, "レンガ窯": 2, 
+                        "石窯": 3, "家具製作所": 2, "製陶所": 2, "カゴ製作所": 2
+                    }
+                    def make_dropdown_change(i=idx): return lambda e: on_big_progress_change(i, e.control.value)
+                    def on_big_progress_change(index, selected_value):
+                        card_details["大きい進歩"][index]["name"] = selected_value
+                        card_details["大きい進歩"][index]["score"] = default_scores.get(selected_value, 0)
+                        recalculate_card_score("大きい進歩")
+                        refresh_dialog_ui()
+
+                    input_name_widget = ft.Container(
+                        content=ft.Dropdown(
+                            value=item["name"] if item["name"] else None, hint_text="選択",
+                            options=options_list, text_size=13, content_padding=5, on_change=make_dropdown_change()
+                        ), width=120, height=35
+                    )
+                else:
+                    def make_name_change(i=idx): return lambda e: on_detail_name_change(name, i, e.control.value)
+                    input_name_widget = ft.TextField(
+                        value=item["name"], hint_text="カード名など", width=120, height=35,
+                        text_size=13, content_padding=5, on_change=make_name_change()
+                    )
+
+                def make_score_change(i=idx): return lambda e: on_detail_score_change(name, i, e.control.value)
+                txt_score = ft.TextField(
+                    value=str(item["score"]), hint_text="点数", width=50, height=35,
+                    text_size=13, content_padding=5, text_align=ft.TextAlign.CENTER,
+                    keyboard_type=ft.KeyboardType.NUMBER, on_change=make_score_change()
+                )
+
+                def make_delete_click(i=idx): return lambda e: remove_detail_item(name, i, refresh_dialog_ui)
+                btn_delete = ft.IconButton(
+                    icon=ft.Icons.DELETE, icon_color=ft.Colors.RED_400, width=30, height=30, on_click=make_delete_click()
+                )
+
+                item_row = ft.Row(controls=[input_name_widget, txt_score, btn_delete], spacing=5, alignment=ft.MainAxisAlignment.CENTER)
+                dialog_items_container.controls.append(item_row)
+            dialog_items_container.update()
+
+        def add_detail_item(e):
+            card_details[name].append({"name": "", "score": 0})
+            refresh_dialog_ui()
+
+        def remove_detail_item(category, index, callback):
+            card_details[category].pop(index)
+            recalculate_card_score(category)
+            callback()
+
+        def on_detail_name_change(category, index, val):
+            card_details[category][index]["name"] = val
+
+        def on_detail_score_change(category, index, val):
+            try: card_details[category][index]["score"] = int(val) if val != "" else 0
+            except ValueError: card_details[category][index]["score"] = 0
+            recalculate_card_score(category)
+
+        def recalculate_card_score(category):
+            total = sum(item["score"] for item in card_details[category])
+            card_inputs[category] = total
+            ranch_c, unused_c, ranch_stable = analyze_grid()
+            update_data_table(ranch_c, unused_c, ranch_stable)
+            update_data_table3()
+            refresh_grand_total_labels()
+
+        page.dialog = ft.AlertDialog(
+            title=ft.Text(f"📋 {name}の内訳入力", weight="bold"),
+            content=ft.Column(
+                controls=[
+                    ft.ElevatedButton(text="項目を追加", icon=ft.Icons.ADD, on_click=add_detail_item, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=6))),
+                    ft.Divider(),
+                    dialog_items_container
+                ], tight=True, width=240
+            ),
+            actions=[ft.TextButton("決定・閉じる", on_click=close_dialog)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.open(page.dialog)
+        refresh_dialog_ui()
+
+    def update_data_table3():
+        rows = []
+        for name, score in card_inputs.items():
+            text_color = ft.Colors.BLACK
+            if name == "職業": text_color = ft.Colors.CYAN_800
+            elif name == "小さい進歩": text_color = ft.Colors.AMBER_500
+            elif name == "大きい進歩": text_color = ft.Colors.RED_900
+
+            input_field = ft.TextField(
+                value=str(score), width=50, height=30, text_size=12, content_padding=3,
+                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_card_input_change(k, e.control.value)
+            )
+            detail_btn = ft.ElevatedButton(
+                text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
+                on_click=lambda e, k=name: show_card_dialog(k)
+            )
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
+        count_table3.rows = rows
+
+    def on_card_input_change(key, val):
+        try: card_inputs[key] = int(val) if val != "" else 0
+        except ValueError: card_inputs[key] = 0
+        ranch_c, unused_c, ranch_stable = analyze_grid()
+        update_data_table(ranch_c, unused_c, ranch_stable)
+        update_data_table3()
+        refresh_grand_total_labels()
+
+    def on_input_change(key, val):
+        try: agri_inputs[key] = int(val) if val != "" else 0
+        except ValueError: agri_inputs[key] = 0
+        ranch_c, unused_c, ranch_stable = analyze_grid()
+        update_data_table(ranch_c, unused_c, ranch_stable)
+        update_data_table2()
+        refresh_grand_total_labels()
+
+    def update_mode_ui():
+        ranch_c, unused_c, ranch_stable = analyze_grid()
+        update_data_table(ranch_c, unused_c, ranch_stable)
+        refresh_grand_total_labels()
         page.update()
 
-    def update_ranking_ui():
-        ranking_list.controls.clear()
-        selected_g = ranking_group_dropdown.value
-        if not selected_g: return
-        ranking_title_text.value = f"🏆 グループ {selected_g} ランキング"
-        try:
-            records_res = supabase.table("records").select("*").execute()
-            privacy_res = supabase.table("privacy").select("*").execute()
-            records_raw = records_res.data or []
-            privacy_raw = privacy_res.data or []
-            allowed_players = set()
-            for p in privacy_raw:
-                p_name = p.get("username") or p.get("player")
-                p_groups = [x.strip() for x in str(p.get("group_number", "1")).replace("，", ",").split(",") if x.strip()]
-                if selected_g in p_groups and p_name: allowed_players.add(p_name)
-            if selected_g == "0" or current_player == "admin": allowed_players.add("admin")
-            filtered = [r for r in records_raw if r.get("player") in allowed_players]
-            
-            if not filtered:
-                ranking_list.controls.append(ft.Container(content=ft.Text("記録がまだありません", color=ft.Colors.GREY_500), alignment=ft.alignment.center))
-            else:
-                user_best = {}
-                for r in filtered:
-                    p = r["player"]
-                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
-                
-                for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
-                    rank = index + 1
-                    medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
-                    rank_row = ft.Row(spacing=10)
-                    rank_row.controls = [
-                        ft.Text(f"{medal} {rank}位", size=16, weight=ft.FontWeight.BOLD, width=60),
-                        ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD),
-                        ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                    ]
-                    ranking_list.controls.append(
-                        ft.Container(content=rank_row, padding=10, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8)
-                    )
-        except Exception: pass
-        page.update()
+    def on_palette_click(e):
+        nonlocal selected_color, current_mode
+        current_mode = "COLOR"
+        selected_color = e.control.data
+        for p_col in palette_options:
+            p_col.controls[0].border = None
+        e.control.border = ft.border.all(3, ft.Colors.BLACK)
+        update_mode_ui()
+
+    def on_line_mode_click(e):
+        nonlocal current_mode
+        current_mode = "LINE"
+        for p_col in palette_options:
+            p_col.controls[0].border = None
+        line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE, shape=ft.RoundedRectangleBorder(radius=8))
+        update_mode_ui()
+
+    def on_cell_click(e):
+        if current_mode == "COLOR":
+            if e.control.bgcolor == selected_color: e.control.bgcolor = ft.Colors.GREY_100
+            else: e.control.bgcolor = selected_color
+            update_mode_ui()
+
+    def toggle_line(e):
+        if current_mode == "LINE":
+            actual_line = e.control.content
+            if actual_line.bgcolor == ft.Colors.BROWN_700: actual_line.bgcolor = ft.Colors.GREY_300
+            else: actual_line.bgcolor = ft.Colors.BROWN_700
+            update_mode_ui()
 
     def handle_existing_login(e):
         nonlocal current_player, my_group_list
@@ -327,14 +573,10 @@ def main(page: ft.Page):
             if not res.data or len(res.data) == 0: 
                 show_alert("名前またはパスワードが間違っています。")
                 return
-                
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
-            
             priv_res = supabase.table("privacy").select("*").execute()
             user_privacy_data = next((p for p in (priv_res.data or []) if (p.get("username") or p.get("player")) == input_name), None)
-            
-            # 💡 修正完了: 文法の不備を完全にクリーンアップしました
             if user_privacy_data:
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 if input_name.lower() == "admin": raw_group_str = "0"
@@ -358,7 +600,7 @@ def main(page: ft.Page):
             main_tab_view.tabs.append(ft.Tab(text="管理者", icon=ft.Icons.ADMIN_PANEL_SETTINGS, content=admin_tab_view))
         elif current_player != "admin" and len(main_tab_view.tabs) == 4:
             main_tab_view.tabs.pop()
-        reset_current_game(None)
+        reset_current_game()
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(success_message), open=True))
         page.update()
@@ -369,6 +611,25 @@ def main(page: ft.Page):
         page.controls.clear()
         page.add(login_view)
         page.update()
+
+    def reset_current_game():
+        for cell in cell_dict.values():
+            cell.bgcolor = ft.Colors.GREY_100
+        for hl in horiz_line_dict.values():
+            hl.bgcolor = ft.Colors.GREY_300
+        for vl in vert_line_dict.values():
+            vl.bgcolor = ft.Colors.GREY_300
+        for k in agri_inputs:
+            agri_inputs[k] = 2 if k == "家族の数" else 0
+        for k in card_inputs:
+            card_inputs[k] = 0
+        for k in card_details:
+            card_details[k].clear()
+        update_data_table2()
+        update_data_table3()
+        ranch_c, unused_c, ranch_stable = analyze_grid()
+        update_data_table(ranch_c, unused_c, ranch_stable)
+        refresh_grand_total_labels()
 
     def create_group_input_row(initial_value=""):
         tf = ft.TextField(value=str(initial_value), label="グループ番号", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
@@ -413,7 +674,6 @@ def main(page: ft.Page):
             update_all_uis()
         except Exception: pass
 
-    # 🛠️ 管理者データグリッドのソート状態管理
     current_sort_column = 3
     current_sort_ascending = False
 
@@ -480,969 +740,160 @@ def main(page: ft.Page):
             admin_data_table.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(f"エラー: {ex}", color=ft.Colors.RED)), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")), ft.DataCell(ft.Text(""))]))
         page.update()
 
-    def handle_new_register(e):
-        # 1. 入力値の取得とバリデーション
-        username = login_name_input.value.strip()
-        password = login_pass_input.value.strip()
-
-        if not username:
-            show_alert("プレイヤー名を入力してください。")
-            return
-        if len(password) < 4:
-            show_alert("パスワードは4桁以上で入力してください。")
-            return
-
+    def refresh_ranking_dropdown_options():
+        ranking_group_dropdown.options.clear()
         try:
-            # 2. ユーザーの重複チェック
-            existing_user = supabase.table("users").select("username").eq("username", username).execute()
-            if existing_user.data and len(existing_user.data) > 0:
-                show_alert("このプレイヤー名は既に登録されています。")
-                return
-
-            # 3. パスワードのハッシュ化とデータ挿入
-            hashed_pass = hash_password(password)
-            
-            # users テーブルへの追加
-            supabase.table("users").insert({
-                "username": username,
-                "password": hashed_pass
-            }).execute()
-
-            # privacy（グループ管理等）テーブルへの追加（初期グループは 1）
-            supabase.table("privacy").insert({
-                "username": username,
-                "group_number": "1"
-            }).execute()
-
-            # 4. 登録成功後の自動ログイン処理
-            page.overlay.append(ft.SnackBar(ft.Text(f"🎉 {username} さんの登録が完了しました！"), open=True))
-            handle_existing_login(None) # そのままログインさせる
-
-        except Exception as ex:
-            show_alert(f"新規登録に失敗しました: {ex}")
-
-    def handle_change_password(e):
-        if not current_player: return
-        old_pass = mypage_old_pass.value.strip()
-        new_pass = mypage_new_pass.value.strip()
-
-        if not old_pass or not new_pass:
-            show_alert("両方のパスワードを入力してください。")
-            return
-        if len(new_pass) < 4:
-            show_alert("新しいパスワードは4桁以上で入力してください。")
-            return
-
-        try:
-            # 現在のパスワードが合っているかDBを確認
-            hashed_old = hash_password(old_pass)
-            res = supabase.table("users").select("password").eq("username", current_player).execute()
-            
-            if not res.data or res.data[0]["password"] != hashed_old:
-                show_alert("現在のパスワードが間違っています。")
-                return
-
-            # 新しいパスワードをハッシュ化して更新
-            hashed_new = hash_password(new_pass)
-            supabase.table("users").update({"password": hashed_new}).eq("username", current_player).execute()
-
-            # 入力欄のクリアとダイアログを閉じる
-            mypage_old_pass.value = ""
-            mypage_new_pass.value = ""
-            page.close(change_pass_dialog)
-            
-            # クライアントストレージの記憶も更新
-            page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
-            
-            page.overlay.append(ft.SnackBar(ft.Text("🔒 パスワードを変更しました"), open=True))
-            page.update()
-        except Exception as ex:
-            show_alert(f"パスワード変更失敗: {ex}")
-
-    def handle_save_secret_question(e):
-        if not current_player: return
-        question = mypage_question_input.value.strip()
-        answer = mypage_answer_input.value.strip()
-
-        if not question or not answer:
-            show_alert("質問と答えの両方を入力してください。")
-            return
-
-        try:
-            # 答えをハッシュ化して安全に保存
-            hashed_answer = hash_password(answer)
-            
-            # 既存のprivacyデータがあるか確認
-            priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
-            
-            # カラム名が 'secret_question' と 'secret_answer' だと想定
-            update_data = {
-                "secret_question": question,
-                "secret_answer": hashed_answer
-            }
-            
-            if priv_res.data:
-                # 既存レコードの更新
-                p_key = "username" if "username" in priv_res.data[0] else "player"
-                supabase.table("privacy").update(update_data).eq(p_key, current_player).execute()
+            if current_player == "admin":
+                privacy_res = supabase.table("privacy").select("group_number").execute()
+                detected_groups = {0}
+                if privacy_res.data:
+                    for row in privacy_res.data:
+                        g_str = str(row.get("group_number", "1"))
+                        for token in g_str.replace("，", ",").split(","):
+                            if (t := token.strip()).isdigit(): detected_groups.add(int(t))
+                for g in sorted(list(detected_groups)):
+                    label_text = "グループ 0 (管理者)" if g == 0 else f"グループ {g}"
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), label_text))
+                ranking_group_dropdown.value = "0"
             else:
-                # なければ新規挿入
-                update_data["username"] = current_player
-                update_data["group_number"] = "1"
-                supabase.table("privacy").insert(update_data).execute()
-
-            mypage_question_input.value = ""
-            mypage_answer_input.value = ""
-            page.close(secret_question_dialog)
-            
-            page.overlay.append(ft.SnackBar(ft.Text("🛡️ 秘密の質問を設定しました"), open=True))
-            page.update()
-        except Exception as ex:
-            show_alert(f"秘密の質問設定失敗: {ex}")
-                
-    def handle_rename(e):
-        nonlocal current_player
-        if not current_player: return
-        new_name = edit_name_input.value.strip()
-
-        if not new_name:
-            show_alert("新しい名前を入力してください。")
-            return
-        if new_name == current_player:
-            page.close(change_name_dialog)
-            return
-
-        try:
-            # 重複チェック
-            existing = supabase.table("users").select("username").eq("username", new_name).execute()
-            if existing.data:
-                show_alert("その名前は既に使われています。")
-                return
-
-            # 各テーブルの名前を一括更新 (※外部キー制約のON UPDATE CASCADEがない場合、手動更新が必要)
-            supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
-            
-            # privacyテーブルの更新 (カラム名がusernameかplayerかで対応)
-            priv_res = supabase.table("privacy").select("*").execute()
-            if priv_res.data:
-                p_key = "username" if "username" in priv_res.data[0] else "player"
-                supabase.table("privacy").update({p_key: new_name}).eq(p_key, current_player).execute()
-                
-            # 過去の対戦記録(records)のプレイヤー名も更新
-            supabase.table("records").update({"player": new_name}).eq("player", current_player).execute()
-
-            # ローカルの管理状態を更新
-            old_name = current_player
-            current_player = new_name
-            logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
-            
-            page.client_storage.set(STORAGE_REMEMBER_USER, new_name)
-            page.close(change_name_dialog)
-            
-            update_all_uis()
-            page.overlay.append(ft.SnackBar(ft.Text(f"👤 名前を {new_name} に変更しました"), open=True))
-            page.update()
-        except Exception as ex:
-            show_alert(f"名前変更失敗: {ex}")
-
-    def execute_delete_account():
-        nonlocal current_player
-        if not current_player: return
-
-        try:
-            # 関連データの削除
-            supabase.table("records").delete().eq("player", current_player).execute()
-            
-            priv_res = supabase.table("privacy").select("*").execute()
-            if priv_res.data:
-                p_key = "username" if "username" in priv_res.data[0] else "player"
-                supabase.table("privacy").delete().eq(p_key, current_player).execute()
-
-            supabase.table("users").delete().eq("username", current_player).execute()
-
-            # ストレージとセッションのクリア
-            page.client_storage.remove(STORAGE_REMEMBER_USER)
-            page.client_storage.remove(STORAGE_REMEMBER_PASS)
-            current_player = None
-            
-            page.close(confirm_delete_dialog)
-            
-            # ログイン画面へ戻す
-            page.controls.clear()
-            page.add(login_view)
-            page.overlay.append(ft.SnackBar(ft.Text("⚠️ アカウントを完全に削除しました"), open=True))
-            page.update()
-        except Exception as ex:
-            show_alert(f"アカウント削除失敗: {ex}")
-
-    def handle_forgot_check_user(e):
-        target_user = forgot_name_input.value.strip()
-        if not target_user:
-            show_alert("プレイヤー名を入力してください。")
-            return
-
-        try:
-            res = supabase.table("privacy").select("*").execute()
-            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
-            
-            if not user_priv or not user_priv.get("secret_question"):
-                forgot_question_text.value = "❌ 秘密の質問が登録されていないか、ユーザーが見つかりません"
-                forgot_question_text.color = ft.Colors.RED
-                page.update()
-                return
-
-            # 質問文を画面にセットして有効化
-            forgot_question_text.value = f"❓ 質問: {user_priv.get('secret_question')}"
-            forgot_question_text.color = ft.Colors.BLUE_600
-            page.update()
-        except Exception as ex:
-            show_alert(f"ユーザー確認エラー: {ex}")
-
-    def handle_forgot_reset_password(e):
-        target_user = forgot_name_input.value.strip()
-        answer = forgot_answer_input.value.strip()
-        new_pass = forgot_new_pass_input.value.strip()
-
-        if not target_user or not answer or not new_pass:
-            show_alert("すべての項目を入力してください。")
-            return
-        if len(new_pass) < 4:
-            show_alert("新しいパスワードは4桁以上必要です。")
-            return
-
-        try:
-            # 登録されている答えのハッシュを取得
-            res = supabase.table("privacy").select("*").execute()
-            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
-            
-            if not user_priv or not user_priv.get("secret_answer"):
-                show_alert("再設定手続きを行えません。")
-                return
-
-            # 回答の照合
-            if hash_password(answer) != user_priv.get("secret_answer"):
-                show_alert("秘密の質問の答えが間違っています。")
-                return
-
-            # パスワードを更新
-            hashed_new_pass = hash_password(new_pass)
-            supabase.table("users").update({"password": hashed_new_pass}).eq("username", target_user).execute()
-
-            # ダイアログを閉じてフォームリセット
-            page.close(forgot_dialog)
-            login_name_input.value = target_user
-            login_pass_input.value = new_pass
-            
-            page.overlay.append(ft.SnackBar(ft.Text("🎉 パスワードを再設定しました。ログインしてください。"), open=True))
-            page.update()
-        except Exception as ex:
-            show_alert(f"パスワード再設定失敗: {ex}")
-
-    def check_auto_login():
-        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
-        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
-        
-        # 記憶されたデータがあれば自動でログイン処理を走らせる
-        if saved_user and saved_pass:
-            login_name_input.value = saved_user
-            login_pass_input.value = saved_pass
-            # すでに定義済みのログイン処理に偽のイベント(None)を渡して実行
-            handle_existing_login(None)
-
-
-    # ─── 各種ダイアログの定義 ───
-    change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(
-        content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)),
-        ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)],
-                                        actions_alignment=ft.MainAxisAlignment.END)
-    change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(
-        content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: page.close(change_pass_dialog)),
-        ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600,
-                          color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
-    secret_question_dialog = ft.AlertDialog(title=ft.Text("🛡️ 秘密の質問の設定"), content=ft.Container(
-        content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140),
-                                            actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(
-                                                secret_question_dialog)),
-                                                     ft.ElevatedButton("設定を保存",
-                                                                       on_click=handle_save_secret_question,
-                                                                       bgcolor=ft.Colors.BLUE_600,
-                                                                       color=ft.Colors.WHITE)],
-                                            actions_alignment=ft.MainAxisAlignment.END)
-
-    confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text(
-        "本当にアカウントを削除しますか？"), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: page.close(confirm_delete_dialog)),
-        ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600),
-                      on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
-
-    forgot_dialog = ft.AlertDialog(title=ft.Text("🔑 パスワードの再設定"), content=ft.Container(content=ft.Column(
-        [forgot_name_input,
-         ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600,
-                           color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input,
-         forgot_new_pass_input], spacing=10, tight=True), width=320, height=325), actions=[
-        ft.TextButton("キャンセル", on_click=lambda e: page.close(forgot_dialog)),
-        ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700,
-                          color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
-
-    # 💡 1. 各項目の個別入力用データを保持するリスト
-    individual_jobs = []    # 職業
-    individual_minors = []  # 小さい進歩
-    individual_majors = []  # 大きい進歩
-
-    # メイン表示用のTextField定義
-    calc_jobs_input = ft.TextField(label="👨‍🍳 職業カードの合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=200, height=48, text_size=14)
-    calc_minor_input = ft.TextField(label="🃏 小さい進歩の合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=200, height=48, text_size=14)
-    calc_major_input = ft.TextField(label="🏛️ 大きい進歩の合計", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=200, height=48, text_size=14)
-    calc_other_input = ft.TextField(label="🎁 その他のボーナス", value="0", keyboard_type=ft.KeyboardType.NUMBER, width=200, height=48, text_size=14)
-    calc_total_text = ft.Text("計算結果: 0 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
-
-    # 個別リスト表示用のコンポーネント
-    card_name_input = ft.TextField(label="カード名（任意）", hint_text="例: 畑追い", expand=3)
-    card_score_input = ft.TextField(label="得点", value="1", keyboard_type=ft.KeyboardType.NUMBER, expand=1, text_align=ft.TextAlign.CENTER)
-    detail_list_view = ft.ListView(expand=True, spacing=5, height=120)
-    
-    # 現在どの画面を開いているかを管理する変数 ("main" / "jobs" / "minors" / "majors")
-    current_view_mode = "main"
-
-    # 💡 2. ダイアログの「中身（中身のColumn）」をモードに合わせて動的に生成する関数
-    def build_dialog_content():
-        if current_view_mode == "main":
-            # 🏠 メインの計算画面レイアウト
-            return ft.Column([
-                ft.Row([
-                    calc_jobs_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: switch_view_mode("jobs"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                
-                ft.Row([
-                    calc_minor_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: switch_view_mode("minors"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                
-                ft.Row([
-                    calc_major_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: switch_view_mode("majors"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                
-                ft.Row([
-                    calc_other_input,
-                    ft.Container(width=40)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                
-                ft.Divider(height=15),
-                calc_total_text
-            ], tight=True, spacing=10)
-            
-        else:
-            # 📋 個別リスト入力画面レイアウト (jobs / minors / majors)
-            detail_list_view.controls.clear()
-            if current_view_mode == "jobs":
-                target_list, prefix, label_txt, hint_txt = individual_jobs, "職業", "職業カード名", "例: 畑追い"
-            elif current_view_mode == "minors":
-                target_list, prefix, label_txt, hint_txt = individual_minors, "小進歩", "小さい進歩カード名", "例: 木の鋤"
-            else:
-                target_list, prefix, label_txt, hint_txt = individual_majors, "大進歩", "大きい進歩カード名", "例: 加熱炉"
-
-            card_name_input.label = label_txt
-            card_name_input.hint_text = hint_txt
-
-            # 登録済みリストの描画
-            for idx, item in enumerate(target_list):
-                display_text = f"{item['name']} ({item['score']}点)" if item["name"] else f"{prefix} {idx+1} ({item['score']}点)"
-                detail_list_view.controls.append(
-                    ft.Row([
-                        ft.Text(display_text, expand=True, size=13),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINED, icon_color=ft.Colors.RED_400, icon_size=20,
-                            on_click=lambda e, i=idx: remove_individual_item(i)
-                        )
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                )
-
-            return ft.Column([
-                ft.Text(f"📋 {prefix}の個別入力リスト", weight=ft.FontWeight.BOLD, size=15),
-                ft.Row([card_name_input, card_score_input], spacing=10),
-                ft.ElevatedButton("カードを追加する", icon=ft.Icons.ADD, on_click=add_individual_item, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE, width=320),
-                ft.Divider(),
-                ft.Text("追加済みのカード一覧:", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
-                detail_list_view,
-                ft.ElevatedButton("戻る", icon=ft.Icons.ARROW_BACK, on_click=lambda e: switch_view_mode("main"), bgcolor=ft.Colors.GREY_400, color=ft.Colors.BLACK, width=320)
-            ], tight=True, spacing=10)
-
-    # 💡 3. 画面モードを切り替えてダイアログを再描画する関数
-    def switch_view_mode(mode):
-        nonlocal current_view_mode
-        current_view_mode = mode
-        card_name_input.value = ""
-        card_score_input.value = "1"
-        
-        # ダイアログの中身を入れ替えてアップデート
-        bonus_calc_dialog.content.content = build_dialog_content()
+                for g in sorted(my_group_list):
+                    ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
+                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
+        except Exception:
+            ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
+            ranking_group_dropdown.value = "1"
         page.update()
 
-    # 💡 4. 個別リストにアイテムを追加する処理
-    def add_individual_item(e):
+    def update_ranking_ui():
+        ranking_list.controls.clear()
+        selected_g = ranking_group_dropdown.value
+        if not selected_g: return
+        ranking_title_text.value = f"🏆 グループ {selected_g} ランキング"
         try:
-            score = int(card_score_input.value) if card_score_input.value else 0
-            name = card_name_input.value.strip()
+            records_res = supabase.table("records").select("*").execute()
+            privacy_res = supabase.table("privacy").select("*").execute()
+            records_raw = records_res.data or []
+            privacy_raw = privacy_res.data or []
+            allowed_players = set()
+            for p in privacy_raw:
+                p_name = p.get("username") or p.get("player")
+                p_groups = [x.strip() for x in str(p.get("group_number", "1")).replace("，", ",").split(",") if x.strip()]
+                if selected_g in p_groups and p_name: allowed_players.add(p_name)
+            if selected_g == "0" or current_player == "admin": allowed_players.add("admin")
+            filtered = [r for r in records_raw if r.get("player") in allowed_players]
             
-            if current_view_mode == "jobs":
-                individual_jobs.append({"name": name, "score": score})
-            elif current_view_mode == "minors":
-                individual_minors.append({"name": name, "score": score})
-            elif current_view_mode == "majors":
-                individual_majors.append({"name": name, "score": score})
-            
-            # 各項目の合計値を親TextFieldに集計
-            if current_view_mode == "jobs":
-                calc_jobs_input.value = str(sum(i["score"] for i in individual_jobs))
-            elif current_view_mode == "minors":
-                calc_minor_input.value = str(sum(i["score"] for i in individual_minors))
-            elif current_view_mode == "majors":
-                calc_major_input.value = str(sum(i["score"] for i in individual_majors))
-
-            card_name_input.value = ""
-            card_score_input.value = "1"
-            refresh_dialog_total(None)
-            switch_view_mode(current_view_mode) # リスト再描画
-        except ValueError:
-            show_alert("得点には数字を入力してください。")
-
-    # 💡 5. 個別リストからアイテムを削除する処理
-    def remove_individual_item(index):
-        if current_view_mode == "jobs":
-            target_list = individual_jobs
-        elif current_view_mode == "minors":
-            target_list = individual_minors
-        else:
-            target_list = individual_majors
-
-        if 0 <= index < len(target_list):
-            target_list.pop(index)
-            
-            if current_view_mode == "jobs":
-                calc_jobs_input.value = str(sum(i["score"] for i in individual_jobs))
-            elif current_view_mode == "minors":
-                calc_minor_input.value = str(sum(i["score"] for i in individual_minors))
-            elif current_view_mode == "majors":
-                calc_major_input.value = str(sum(i["score"] for i in individual_majors))
-
-            refresh_dialog_total(None)
-            switch_view_mode(current_view_mode)
-
-    # ダイアログ全体のリアルタイム合計計算
-    def refresh_dialog_total(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            calc_total_text.value = f"計算結果: {jobs + minor + major + other} 点"
-        except ValueError:
-            calc_total_text.value = "有効な数字を入力してください"
+            if not filtered:
+                ranking_list.controls.append(ft.Container(content=ft.Text("記録がまだありません", color=ft.Colors.GREY_500), alignment=ft.alignment.center))
+            else:
+                user_best = {}
+                for r in filtered:
+                    p = r["player"]
+                    if p not in user_best or r["final_score"] > user_best[p]["final_score"]: user_best[p] = r
+                for index, record in enumerate(sorted(list(user_best.values()), key=lambda x: x["final_score"], reverse=True)):
+                    rank = index + 1
+                    medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, "  ")
+                    rank_row = ft.Row(spacing=10, controls=[
+                        ft.Text(f"{medal} {rank}位", size=14, weight=ft.FontWeight.BOLD, width=55),
+                        ft.Text(f"{record['player']}", expand=True, weight=ft.FontWeight.BOLD, size=14),
+                        ft.Text(f"{record['final_score']} 点", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, size=14)
+                    ])
+                    ranking_list.controls.append(ft.Container(content=rank_row, padding=8, border=ft.border.all(1, ft.Colors.GREY_200), border_radius=8))
+        except Exception: pass
         page.update()
 
-    # 変更イベントの紐付け
-    calc_jobs_input.on_change = refresh_dialog_total
-    calc_minor_input.on_change = refresh_dialog_total
-    calc_major_input.on_change = refresh_dialog_total
-    calc_other_input.on_change = refresh_dialog_total
+    # 各種ダイアログ構造構築
+    change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
+    change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_pass_dialog)), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
+    secret_question_dialog = ft.AlertDialog(title=ft.Text("🛡️ 秘密の質問の設定"), content=ft.Container(content=ft.Column([mypage_question_input, mypage_answer_input], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(secret_question_dialog)), ft.ElevatedButton("設定を保存", on_click=handle_save_secret_question, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
+    confirm_delete_dialog = ft.AlertDialog(title=ft.Text("⚠️ 最終確認"), content=ft.Text("本当にアカウントを削除しますか？"), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(confirm_delete_dialog)), ft.TextButton("削除する", style=ft.ButtonStyle(color=ft.Colors.RED_600), on_click=lambda e: execute_delete_account())], actions_alignment=ft.MainAxisAlignment.END)
+    forgot_dialog = ft.AlertDialog(title=ft.Text("🔑 パスワードの再設定"), content=ft.Container(content=ft.Column([forgot_name_input, ft.ElevatedButton("1. 質問を確認する", on_click=handle_forgot_check_user, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE), ft.Divider(height=10), forgot_question_text, forgot_answer_input, forgot_new_pass_input], spacing=10, tight=True), width=320, height=325), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(forgot_dialog)), ft.ElevatedButton("2. パスワードを更新", on_click=handle_forgot_reset_password, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
+    change_group_dialog = ft.AlertDialog(title=ft.Text("🔢 グループ番号の管理"), content=ft.Container(content=ft.ListView(controls=[group_inputs_container, ft.TextButton("グループを追加", icon=ft.Icons.ADD, on_click=add_blank_group_input_row)], spacing=10), width=320, height=250), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_group_dialog)), ft.ElevatedButton("変更を保存", on_click=handle_save_group_number, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
 
-    # 確定ボタンを押した時の処理
-    def handle_confirm_bonus(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            
-            counts["bonus_calc_points"] = jobs + minor + major + other
-            calculate_total_score_ui_only()
-            page.close(bonus_calc_dialog)
-            page.update()
-        except ValueError:
-            show_alert("数字のみ入力してください。")
-
-    # 💡 6. メインの計算ダイアログ本体 (初期化時はbuild_dialog_content()を呼び出す)
-    bonus_calc_dialog = ft.AlertDialog(
-        title=ft.Text("🃏 カード・ボーナス点の計算"),
-        content=ft.Container(
-            content=build_dialog_content(), # 💡 動的に生成されたコンポーネントをセット
-            width=320,
-            height=370
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
-            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    # 確定ボタンを押した時の処理
-    def handle_confirm_bonus(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            
-            counts["bonus_calc_points"] = jobs + minor + major + other
-            calculate_total_score_ui_only()
-            page.close(bonus_calc_dialog)
-            page.update()
-        except ValueError:
-            show_alert("数字のみ入力してください。")
-
-    # 💡 7. メインの計算ダイアログ（絶対に押し出されない2カラム縦並び構造）
-    bonus_calc_dialog = ft.AlertDialog(
-        title=ft.Text("🃏 カード・ボーナス点の計算"),
-        content=ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    # 【左列】入力フィールドを完全に縦並びにする
-                    ft.Column([
-                        calc_jobs_input,
-                        calc_minor_input,
-                        calc_major_input,
-                        calc_other_input
-                    ], spacing=12),
-                    
-                    # 【右列】連動する個別リスト用のボタンを完全に縦並びにする（その他の横はスペースで埋める）
-                    ft.Column([
-                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"), height=45),
-                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"), height=45),
-                        ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"), height=45),
-                        ft.Container(width=40, height=45)  # その他欄の横は空白の板を置いてズレを防止
-                    ], spacing=12, alignment=ft.MainAxisAlignment.START)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START),
-                
-                ft.Divider(height=15),
-                calc_total_text
-            ], tight=True),
-            width=270,   # 幅をさらにコンパクトにして450pxの画面に絶対収まるように設計
-            height=300
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
-            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
-
-    # 確定ボタンを押した時の処理
-    def handle_confirm_bonus(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            
-            counts["bonus_calc_points"] = jobs + minor + major + other
-            calculate_total_score_ui_only()
-            page.close(bonus_calc_dialog)
-            page.update()
-        except ValueError:
-            show_alert("数字のみ入力してください。")
-
-    # 💡 7. メインの計算ダイアログ
-    bonus_calc_dialog = ft.AlertDialog(
-        title=ft.Text("🃏 カード・ボーナス点の計算"),
-        content=ft.Container(
-            content=ft.Column([
-                # 👨‍🍳 職業（Row全体の横並びが崩れないよう調整）
-                ft.Row([
-                    calc_jobs_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                
-                # 🃏 小さい進歩
-                ft.Row([
-                    calc_minor_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                
-                # 🏛️ 大きい進歩
-                ft.Row([
-                    calc_major_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"))
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                
-                # 🎁 その他（横幅を揃えるためにRowで包む）
-                ft.Row([calc_other_input], alignment=ft.MainAxisAlignment.START),
-                
-                ft.Divider(),
-                calc_total_text
-            ], 
-            spacing=10, 
-            tight=True,
-            scroll=ft.ScrollMode.AUTO
-            ),
-            width=320,
-            height=400
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
-            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
+    action_buttons_row = ft.ResponsiveRow(controls=[ft.Container(content=register_btn, col={"xs": 6}, alignment=ft.alignment.center, padding=5), ft.Container(content=login_btn, col={"xs": 6}, alignment=ft.alignment.center, padding=5)], alignment=ft.MainAxisAlignment.CENTER)
+    global_header_bar = ft.Container(content=ft.Row(controls=[logged_in_user_text, ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600), on_click=handle_logout)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10, bgcolor=ft.Colors.GREY_100, border_radius=8)
     
-    # 確定ボタンを押した時の処理
-    def handle_confirm_bonus(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            
-            counts["bonus_calc_points"] = jobs + minor + major + other
-            calculate_total_score_ui_only()
-            page.close(bonus_calc_dialog)
-            page.update()
-        except ValueError:
-            show_alert("数字のみ入力してください。")
+    admin_search_input = ft.TextField(label="プレイヤー名で検索", prefix_icon=ft.Icons.SEARCH, on_change=lambda e: update_admin_ui(), expand=True)
+    admin_data_table = ft.DataTable(columns=[ft.DataColumn(ft.Text("プレイヤー名"), on_sort=handle_admin_table_sort), ft.DataColumn(ft.Text("グループ"), on_sort=handle_admin_table_sort), ft.DataColumn(ft.Text("最終ログイン"), on_sort=handle_admin_table_sort), ft.DataColumn(ft.Text("最高点"), on_sort=handle_admin_table_sort)], rows=[], heading_row_color=ft.Colors.BLUE_GREY_50, divider_thickness=1, column_spacing=10, sort_column_index=3, sort_ascending=False, expand=True)
+    admin_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD), padding=12), ft.Container(content=ft.Row([admin_search_input]), padding=5), ft.ListView(controls=[admin_data_table], expand=True)], expand=True)
 
-    # 💡 7. メインの計算ダイアログ（縦幅を広げ、スクロールできるように修正しました）
-    bonus_calc_dialog = ft.AlertDialog(
-        title=ft.Text("🃏 カード・ボーナス点の計算"),
-        content=ft.Container(
-            content=ft.Column([
-                # 👨‍🍳 職業
-                ft.Row([
-                    calc_jobs_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="職業を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("jobs"))
-                ], alignment=ft.MainAxisAlignment.CENTER),
-                
-                # 🃏 小さい進歩
-                ft.Row([
-                    calc_minor_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="小進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("minors"))
-                ], alignment=ft.MainAxisAlignment.CENTER),
-                
-                # 🏛️ 大きい進歩
-                ft.Row([
-                    calc_major_input,
-                    ft.IconButton(icon=ft.Icons.LIST_ALT_OUTLINED, tooltip="大進歩を個別入力", icon_color=ft.Colors.BLUE_600, on_click=lambda e: open_detail_dialog("majors"))
-                ], alignment=ft.MainAxisAlignment.CENTER),
-                
-                # 🎁 その他（ここだけ直接入力のみ）
-                calc_other_input,
-                
-                ft.Divider(),
-                calc_total_text
-            ], 
-            spacing=12, 
-            tight=True,
-            scroll=ft.ScrollMode.AUTO  # 💡 画面が小さくてもスクロールしてすべて見えるように設定
-            ),
-            width=340,
-            height=420  # 💡 すべての項目とアイコンが収まるように高さを420に拡大
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
-            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
+    login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: page.open(forgot_dialog))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
 
-    # 確定ボタンを押した時の処理
-    def handle_confirm_bonus(e):
-        try:
-            jobs = int(calc_jobs_input.value) if calc_jobs_input.value else 0
-            minor = int(calc_minor_input.value) if calc_minor_input.value else 0
-            major = int(calc_major_input.value) if calc_major_input.value else 0
-            other = int(calc_other_input.value) if calc_other_input.value else 0
-            
-            counts["bonus_calc_points"] = jobs + minor + major + other
-            calculate_total_score_ui_only()
-            page.close(bonus_calc_dialog)
-            page.update()
-        except ValueError:
-            show_alert("数字のみ入力してください。")
+    # 🚜 牧場・資源管理グリッドボードUI組み立て
+    palette_options = []
+    for info in PALETTE_INFO:
+        btn = ft.Container(width=35, height=35, bgcolor=info["color"], border_radius=18, data=info["color"], on_click=on_palette_click)
+        lbl = ft.Text(info["name"], size=8, weight="bold")
+        palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
 
-    # 💡 メインの計算ダイアログ（職業の横に個別入力ボタンを配置）
-    bonus_calc_dialog = ft.AlertDialog(
-        title=ft.Text("🃏 カード・ボーナス点の計算"),
-        content=ft.Container(
-            content=ft.Column([
-                # 職業入力欄の横に個別リストを開くボタンを配置
-                ft.Row([
-                    calc_jobs_input,
-                    ft.IconButton(
-                        icon=ft.Icons.LIST_ALT_OUTLINED, 
-                        tooltip="個別にリスト入力する",
-                        icon_color=ft.Colors.BLUE_600,
-                        on_click=lambda e: page.open(job_detail_dialog)
-                    )
-                ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                calc_minor_input,
-                calc_major_input,
-                calc_other_input,
-                ft.Divider(),
-                calc_total_text
-            ], spacing=10, tight=True),
-            width=340,
-            height=340
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(bonus_calc_dialog)),
-            ft.ElevatedButton("確定して反映", on_click=handle_confirm_bonus, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
+    palette_row = ft.Row(controls=palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+    line_mode_btn = ft.ElevatedButton(text="✏️ 柵の建設", on_click=on_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=8)))
+    top_control_row = ft.Row(controls=[palette_row, line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
     
-    change_group_dialog = ft.AlertDialog(
-        title=ft.Text("🔢 グループ番号の管理"),
-        content=ft.Container(
-            content=ft.ListView(
-                controls=[
-                    group_inputs_container,
-                    ft.TextButton(
-                        "グループを追加",
-                        icon=ft.Icons.ADD,
-                        on_click=add_blank_group_input_row
-                    )
-                ],
-                spacing=10,
-            ),
-            width=320,
-            height=250
-        ),
-        actions=[
-            ft.TextButton("キャンセル", on_click=lambda e: page.close(change_group_dialog)),
-            ft.ElevatedButton("変更を保存", on_click=handle_save_group_number, bgcolor=ft.Colors.BLUE_600,
-                              color=ft.Colors.WHITE)
-        ],
-        actions_alignment=ft.MainAxisAlignment.END
-    )
+    count_table = ft.DataTable(width=360, column_spacing=10, columns=[ft.DataColumn(ft.Text("盤面項目")), ft.DataColumn(ft.Text("数")), ft.DataColumn(ft.Text("得点"))])
+    count_table2 = ft.DataTable(width=360, column_spacing=10, columns=[ft.DataColumn(ft.Text("資源・家族")), ft.DataColumn(ft.Text("数")), ft.DataColumn(ft.Text("得点"))])
+    count_table3 = ft.DataTable(width=360, column_spacing=10, columns=[ft.DataColumn(ft.Text("カードボーナス")), ft.DataColumn(ft.Text("得点")), ft.DataColumn(ft.Text("内訳入力"))])
 
-    action_buttons_row = ft.ResponsiveRow(
-        controls=[ft.Container(content=register_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5),
-                  ft.Container(content=login_btn, col={"xs": 12, "md": 6}, alignment=ft.alignment.center, padding=5)],
-        alignment=ft.MainAxisAlignment.CENTER)
+    stack_layout = ft.Stack(width=TOTAL_W, height=TOTAL_H)
+    for r in range(ROWS):
+        for c in range(COLS):
+            cell = ft.Container(content=ft.Text(f"{r * COLS + c + 1}", color=ft.Colors.GREY_400, size=11), alignment=ft.alignment.center, bgcolor=ft.Colors.GREY_100, width=CELL_W, height=CELL_H, left=c * CELL_W + OFFSET, top=r * CELL_H + OFFSET, on_click=on_cell_click)
+            stack_layout.controls.append(cell)
+            cell_dict[(r, c)] = cell
 
-    global_header_bar = ft.Container(content=ft.Row(controls=[logged_in_user_text,
-                                                              ft.TextButton("ログアウト", icon=ft.Icons.LOGOUT,
-                                                                            style=ft.ButtonStyle(
-                                                                                color=ft.Colors.RED_600,
-                                                                                icon_color=ft.Colors.RED_600),
-                                                                            on_click=handle_logout)],
-                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10,
-                                     bgcolor=ft.Colors.GREY_100, border_radius=8)
-    admin_search_input = ft.TextField(label="プレイヤー名で検索", prefix_icon=ft.Icons.SEARCH,
-                                      on_change=lambda e: update_admin_ui(), expand=True)
+    for r in range(ROWS + 1):
+        for c in range(COLS):
+            left_pos, top_pos = c * CELL_W + OFFSET, r * CELL_H - (LINE_THICK / 2) + OFFSET
+            if r == 0: top_pos = OFFSET
+            if r == ROWS: top_pos = TOTAL_H - LINE_THICK - OFFSET
+            horiz_line = ft.Container(width=CELL_W, height=LINE_THICK, bgcolor=ft.Colors.GREY_300)
+            hit_box = ft.Container(content=horiz_line, width=CELL_W, height=LINE_THICK + (HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos, top=top_pos - HIT_BOX_EXT, on_click=toggle_line)
+            stack_layout.controls.append(hit_box)
+            horiz_line_dict[(r, c)] = horiz_line
 
-    admin_data_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("プレイヤー名", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
-            ft.DataColumn(ft.Text("グループ", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
-            ft.DataColumn(ft.Text("最終ログイン日時", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
-            ft.DataColumn(ft.Text("最高得点", weight=ft.FontWeight.BOLD), on_sort=handle_admin_table_sort),
-        ],
-        rows=[], heading_row_color=ft.Colors.BLUE_GREY_50, divider_thickness=1, horizontal_margin=10, column_spacing=10,
-        sort_column_index=3, sort_ascending=False, expand=True
-    )
+    for c in range(COLS + 1):
+        for r in range(ROWS):
+            left_pos, top_pos = c * CELL_W - (LINE_THICK / 2) + OFFSET, r * CELL_H + OFFSET
+            if c == 0: left_pos = OFFSET
+            if c == COLS: left_pos = TOTAL_W - LINE_THICK - OFFSET
+            vert_line = ft.Container(width=LINE_THICK, height=CELL_H, bgcolor=ft.Colors.GREY_300)
+            hit_box = ft.Container(content=vert_line, width=LINE_THICK + (HIT_BOX_EXT * 2), height=CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - HIT_BOX_EXT, top=top_pos, on_click=toggle_line)
+            stack_layout.controls.append(hit_box)
+            vert_line_dict[(c, r)] = vert_line
 
-    admin_tab_view = ft.Column(
-        controls=[
-            ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD,
-                                         color=ft.Colors.BLUE_GREY_800), padding=12),
-            ft.Container(content=ft.Row([admin_search_input]), padding=ft.padding.only(left=10, right=10, bottom=5)),
-            ft.Container(height=5),
-            ft.ListView(controls=[admin_data_table], expand=True)
-        ], expand=True
-    )
-
-    login_view = ft.Container(content=ft.Column(
-        controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600),
-                  ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15),
-                  ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300),
-                  ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10),
-                  ft.TextButton("🔑 パスワードを忘れた場合はこちら",
-                                on_click=lambda e: (setattr(forgot_name_input, "value", ""),
-                                                    setattr(forgot_answer_input, "value", ""),
-                                                    setattr(forgot_new_pass_input, "value", ""),
-                                                    setattr(forgot_question_text, "value",
-                                                            "プレイヤー名を入力して「質問を確認」を押してください"),
-                                                    page.open(forgot_dialog)))],
-        alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-        padding=20, alignment=ft.alignment.center, expand=True, visible=True)
-
-    # 🌾 部屋数専用の選択＆カウンターUI定義（未定義順エラー対策でここに配置）
-    def create_room_selector(color):
-        return ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Container(content=room_type_switch, width=110, alignment=ft.alignment.center_left),
-                    ft.Row(
-                        controls=[
-                            ft.Container(content=ft.TextButton("-3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -3)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("-1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", -1)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ui_text_map["room_count"], width=30, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+1", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 1)), width=38, alignment=ft.alignment.center),
-                            ft.Container(content=ft.TextButton("+3", style=ft.ButtonStyle(color=color, padding=0), on_click=lambda e: adjust_count("room_count", 3)), width=38, alignment=ft.alignment.center)
-                        ], spacing=0, alignment=ft.MainAxisAlignment.END
-                    )
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ), padding=4, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=10, bgcolor=ft.Colors.WHITE
-        )
-
-    # 🌾 修正：calc_tab_view の中身
     calc_tab_view = ft.ListView(
         controls=[
-            ft.Container(
-                content=ft.Column(
-                    [ft.Text("現在のアグリコラ合計得点", size=14, color=ft.Colors.GREY_600), score_display],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.center, padding=10),
-            ft.Container(
-                content=ft.Column([
-                    create_agricola_selector("🟫 畑の枚数", "field", ft.Colors.BROWN_600),
-                    create_agricola_selector("🟩 牧場の数", "pasture", ft.Colors.GREEN_600),
-                    create_agricola_selector("🌾 小麦の数", "grain", ft.Colors.AMBER_600),
-                    create_agricola_selector("🥕 野菜の数", "vegetable", ft.Colors.ORANGE_600),
-                    create_agricola_selector("🐑 羊の頭数", "sheep", ft.Colors.BLUE_GREY_400),
-                    create_agricola_selector("🐗 猪の頭数", "wild_boar", ft.Colors.BROWN_400),
-                    create_agricola_selector("🐂 牛の頭数", "cattle", ft.Colors.BLUE_GREY_700),
-
-                    ft.Divider(height=20, thickness=1, color=ft.Colors.GREY_400),
-
-                    create_agricola_selector("❌ 未使用スペース (マイナス用)", "empty_space", ft.Colors.RED_400),
-                    create_agricola_selector("🏠 柵の中の厩", "stable", ft.Colors.AMBER_800),
-
-                    create_room_selector(ft.Colors.DEEP_ORANGE_600),
-
-                    create_agricola_selector("👨‍👩‍👧 家族の人数", "family", ft.Colors.BLUE_400),
-                    create_agricola_selector("🥺 乞食カードの枚数", "begging_card", ft.Colors.RED_700),
-                    
-                    # 💡 修正：メイン画面のボタン。
-                    ft.Container(
-                        content=ft.ElevatedButton(
-                            "🃏 カード・ボーナス点を計算する",
-                            icon=ft.Icons.CALCULATE_OUTLINED,
-                            on_click=lambda e: (
-                                individual_jobs.clear(),
-                                individual_minors.clear(),
-                                individual_majors.clear(),
-                                setattr(calc_jobs_input, "value", "0"),
-                                setattr(calc_minor_input, "value", "0"),
-                                setattr(calc_major_input, "value", "0"),
-                                setattr(calc_other_input, "value", "0"),
-                                setattr(calc_total_text, "value", "計算結果: 0 点"),
-                                switch_view_mode("main"),  # 💡 最初は必ずメイン計算画面にする
-                                page.open(bonus_calc_dialog)
-                            ),
-                            bgcolor=ft.Colors.PURPLE_600,
-                            color=ft.Colors.WHITE,
-                            height=45
-                        ),
-                        padding=ft.padding.only(top=5)
-                    )
-                ], spacing=12), padding=10),
+            ft.Container(content=ft.Column([ft.Text("現在のアグリコラ合計得点", size=13, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=5),
+            ft.Container(content=top_control_row, padding=5),
+            ft.Container(content=stack_layout, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center),
+            ft.Container(content=count_table, alignment=ft.alignment.center),
+            ft.Container(content=count_table2, alignment=ft.alignment.center),
+            ft.Container(content=count_table3, alignment=ft.alignment.center),
             ft.Container(content=ft.Row(controls=[
-                ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=reset_current_game,
-                                  style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
-                ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game,
-                                  bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)],
-                alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=15)
-        ],
-        expand=True,
-        spacing=10
+                ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=lambda e: reset_current_game(), style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
+                ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+            ], alignment=ft.MainAxisAlignment.SPACE_EVENLY), padding=10)
+        ], expand=True, spacing=10
     )
 
-    mypage_tab_view = ft.Column(
-        controls=[
-            ft.Container(content=ft.Text("スコア一覧", size=16, weight=ft.FontWeight.BOLD,
-                                         color=ft.Colors.BLUE_GREY_700),
-                         padding=ft.padding.only(left=15, top=15, right=15)),
-            ft.Container(content=my_records_list, height=220),
-            ft.Container(height=5),
-            ft.Container(
-                content=ft.Column([
-                    ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    ft.Container(height=3),
-                    ft.Row(
-                        controls=[
-                            ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更",
-                                          on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE,
-                                          icon_size=26),
-                            ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更",
-                                          on_click=open_change_group_dialog, icon_color=ft.Colors.WHITE,
-                                          icon_size=26),
-                            ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更",
-                                          on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE,
-                                          icon_size=26),
-                            ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問設定",
-                                          on_click=lambda e: page.open(secret_question_dialog),
-                                          icon_color=ft.Colors.WHITE, icon_size=26),
-                            ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウントの完全削除",
-                                          on_click=lambda e: page.open(confirm_delete_dialog),
-                                          icon_color=ft.Colors.RED_300, icon_size=26)
-                        ],
-                        wrap=True, spacing=8, run_spacing=5, alignment=ft.MainAxisAlignment.START
-                    )
-                ]),
-                padding=12, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10,
-                border=ft.border.all(1, ft.Colors.BLUE_GREY_700)
-            ),
-        ],
-        scroll=ft.ScrollMode.AUTO
-    )
+    mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("スコア一覧", size=16, weight=ft.FontWeight.BOLD), padding=10), ft.Container(content=my_records_list, height=220), ft.Container(content=ft.Column([ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), ft.Row(controls=[ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=open_change_group_dialog, icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウント削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300)], wrap=True, spacing=5)]), padding=10, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10)], scroll=ft.ScrollMode.AUTO)
+    ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Row([ft.Container(content=ranking_title_text, expand=True), ranking_group_dropdown], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10), ft.Container(content=ranking_list, height=430)])
 
-    ranking_tab_view = ft.Column(
-        controls=[
-            ft.Container(
-                content=ft.Row([
-                    ft.Container(content=ranking_title_text, expand=True),
-                    ranking_group_dropdown
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=15
-            ),
-            ft.Container(content=ranking_list, height=430)
-        ]
-    )
+    main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算ボード", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True, on_change=lambda e: ((refresh_ranking_dropdown_options(), update_ranking_ui()) if main_tab_view.selected_index == 2 else None, page.update()))
 
-    main_tab_view = ft.Tabs(
-        selected_index=0,
-        animation_duration=300,
-        tabs=[
-            ft.Tab(text="得点計算", icon=ft.Icons.CALCULATE, content=calc_tab_view),
-            ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view),
-            ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view),
-        ],
-        expand=True,
-        on_change=lambda e: (
-            (refresh_ranking_dropdown_options(), update_ranking_ui()) if main_tab_view.selected_index == 2 else None,
-            page.update()
-        )
-    )
-
-    authenticated_view = ft.Column(
-        controls=[
-            global_header_bar,
-            main_tab_view
-        ],
-        expand=True,
-        visible=False
-    )
+    authenticated_view = ft.Column(controls=[global_header_bar, main_tab_view], expand=True, visible=False)
 
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    calculate_total_score_ui_only()
-    update_all_uis()
+    # 初期ボード状態生成
+    palette_options[0].controls[0].border = ft.border.all(3, ft.Colors.BLACK)
+    reset_current_game()
 
     login_name_input.value = page.client_storage.get(STORAGE_REMEMBER_USER) or ""
     login_pass_input.value = page.client_storage.get(STORAGE_REMEMBER_PASS) or ""
-
     check_auto_login()
     page.update()
 
-
 if __name__ == "__main__":
-    import os
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
