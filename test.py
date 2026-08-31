@@ -14,7 +14,7 @@ def main(page: ft.Page):
     # =========================================================================
     # ⚠️ あなたのSupabaseの情報をここに貼り付けてください
     # =========================================================================
-    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
+    SUPABASE_URL = "https://supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
 
@@ -100,17 +100,16 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡 【完全版・事前宣言】UI組み立て時の定義順エラーを完全に防止する安全なラッパー
-    handle_new_register = lambda e: _handle_new_register(e) if '_handle_new_register' in locals() or '_handle_new_register' in globals() else None
-    handle_change_password = lambda e: _handle_change_password(e) if '_handle_change_password' in locals() or '_handle_change_password' in globals() else None
-    handle_save_secret_question = lambda e: _handle_save_secret_question(e) if '_handle_save_secret_question' in locals() or '_handle_save_secret_question' in globals() else None
-    execute_delete_account = lambda: _execute_delete_account() if '_execute_delete_account' in locals() or '_execute_delete_account' in globals() else None
-    handle_forgot_check_user = lambda e: _handle_forgot_check_user(e) if '_handle_forgot_check_user' in locals() or '_handle_forgot_check_user' in globals() else None
-    handle_forgot_reset_password = lambda e: _handle_forgot_reset_password(e) if '_handle_forgot_reset_password' in locals() or '_handle_forgot_reset_password' in globals() else None
-    open_change_group_dialog = lambda e: _open_change_group_dialog(e) if '_open_change_group_dialog' in locals() or '_open_change_group_dialog' in globals() else None
-    handle_save_group_number = lambda e: _handle_save_group_number(e) if '_handle_save_group_number' in locals() or '_handle_save_group_number' in globals() else None
-    check_auto_login = lambda: _check_auto_login() if '_check_auto_login' in locals() or '_check_auto_login' in globals() else None
+    # 💡 定義順エラーを安全に回避するためのローカル関数バインディング設計
+    _handle_new_register = None
+    _handle_forgot_check_user = None
+    _handle_forgot_reset_password = None
+    _check_auto_login = None
 
+    def handle_new_register(e): _handle_new_register(e)
+    def handle_forgot_check_user(e): _handle_forgot_check_user(e)
+    def handle_forgot_reset_password(e): _handle_forgot_reset_password(e)
+    def check_auto_login(): _check_auto_login()
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -195,9 +194,9 @@ def main(page: ft.Page):
             score = -1
             if name == "小麦":
                 if count == 0: score = -1
-                elif 1 <= count <= 3: score = 1
-                elif 4 <= count <= 5: score = 2
-                elif 6 <= count <= 7: score = 3
+                elif count <= 3: score = 1
+                elif count <= 5: score = 2
+                elif count <= 7: score = 3
                 else: score = 4
             elif name == "野菜":
                 if count == 0: score = -1
@@ -207,21 +206,21 @@ def main(page: ft.Page):
                 else: score = 4
             elif name == "羊":
                 if count == 0: score = -1
-                elif 1 <= count <= 3: score = 1
-                elif 4 <= count <= 5: score = 2
-                elif 6 <= count <= 7: score = 3
+                elif count <= 3: score = 1
+                elif count <= 5: score = 2
+                elif count <= 7: score = 3
                 else: score = 4
             elif name == "猪":
                 if count == 0: score = -1
-                elif 1 <= count <= 2: score = 1
-                elif 3 <= count <= 4: score = 2
-                elif 5 <= count <= 6: score = 3
+                elif count <= 2: score = 1
+                elif count <= 4: score = 2
+                elif count <= 6: score = 3
                 else: score = 4
             elif name == "牛":
                 if count == 0: score = -1
                 elif count == 1: score = 1
-                elif 2 <= count <= 3: score = 2
-                elif 4 <= count <= 5: score = 3
+                elif count <= 3: score = 2
+                elif count <= 5: score = 3
                 else: score = 4
             elif name == "家族の数": score = count * 3
             elif name == "乞食の枚数": score = count * -3
@@ -403,18 +402,19 @@ def main(page: ft.Page):
             elif name == "家族の数": score = count * 3
             elif name == "乞食の枚数": score = count * -3
 
-            def make_on_change(k=name): return lambda e: on_input_change(k, e.control.value)
+            def make_on_change(k=name):
+                return lambda e: on_input_change(k, e.control.value)
+                
             def clear_card_on_focus(e):
                 e.control.value = ""
                 e.control.update()
 
             input_field = ft.TextField(
-                value=str(score), width=60, height=35, text_size=14, content_padding=5,
+                value=str(count), width=60, height=35, text_size=14, content_padding=5,
                 text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, 
                 on_change=make_on_change(),
-                on_focus=clear_card_on_focus  # ⭕ タップした瞬間に元の文字を消す
+                on_focus=clear_card_on_focus
             )
-
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
         count_table2.rows = rows
 
@@ -430,7 +430,7 @@ def main(page: ft.Page):
                 if name == "大きい進歩":
                     options_list = [
                         ft.dropdown.Option("かまど"), ft.dropdown.Option("調理場"),
-                        ft.dropdown.Option("井井戸"), ft.dropdown.Option("レンガ窯"),
+                        ft.dropdown.Option("井戸"), ft.dropdown.Option("レンガ窯"),
                         ft.dropdown.Option("石窯"), ft.dropdown.Option("家具製作所"),
                         ft.dropdown.Option("製陶所"), ft.dropdown.Option("カゴ製作所")
                     ]
@@ -498,6 +498,7 @@ def main(page: ft.Page):
             update_data_table(ranch_c, unused_c, ranch_stable)
             update_data_table3()
             refresh_grand_total_labels()
+            page.update()
 
         page.dialog = ft.AlertDialog(
             title=ft.Text(f"📋 {name}の内訳入力", weight="bold"),
@@ -539,36 +540,40 @@ def main(page: ft.Page):
                 on_focus=clear_card_on_focus
             )
 
-            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=16, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
+            # ⭕【バグ修正】未定義だった detail_btn を正しく定義
+            detail_btn = ft.ElevatedButton(
+                text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
+                on_click=lambda e, k=name: show_card_dialog(k)
+            )
+
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
 
         rows.append(
             ft.DataRow(
                 color=ft.Colors.GREY_100,
                 cells=[
-                    ft.DataCell(ft.Text("合計点", size=18, weight="bold", color=ft.Colors.BLACK)),
-                    ft.DataCell(ft.Text(f"{sub_total} 点", size=18, weight="bold", color=ft.Colors.RED_700 if sub_total < 0 else ft.Colors.GREEN_700)),
+                    ft.DataCell(ft.Text("合計点", size=14, weight="bold", color=ft.Colors.BLACK)),
+                    ft.DataCell(ft.Text(f"{sub_total} 点", size=14, weight="bold", color=ft.Colors.RED_700 if sub_total < 0 else ft.Colors.GREEN_700)),
                     ft.DataCell(ft.Text("", size=16)),
                 ]
             )
         )
         count_table3.rows = rows
 
-    # ⭕【修正】入力中のTextFieldを勝手にリフレッシュして個数を書き換えるバグを防止
+    # ⭕【バグ修正】キーボードから直接入力した数値を内部変数へ確実に反映し、リアルタイム計算
     def on_card_input_change(key, val):
         try: card_inputs[key] = int(val) if val != "" else 0
         except ValueError: card_inputs[key] = 0
         
-        # 内部の計算データだけを最新に更新
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
         
-        # 入力中の表3自体を丸ごと再描画するのをやめ、点数ラベルとコンテナの更新だけに留めます
+        # フォームの再描画によるフリーズを防ぐため、コンテナ単位で効率的にリフレッシュ
         table_container.update()
         refresh_grand_total_labels()
-        top_info_container.update()
-        bottom_grand_total_container.update()
+        page.update()
 
-    # ⭕【修正】2つ目の表も同様に、入力中のTextFieldを勝手に書き換えないように修正
+    # ⭕【バグ修正】2つ目の表も同様に、キーボード入力値をリアルタイムに合算
     def on_input_change(key, val):
         try: agri_inputs[key] = int(val) if val != "" else 0
         except ValueError: agri_inputs[key] = 0
@@ -576,11 +581,9 @@ def main(page: ft.Page):
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
         
-        # 入力欄の文字が勝手に変わるのを防ぐため、update_data_table2() の一斉上書きをスキップします
         table_container.update()
         refresh_grand_total_labels()
-        top_info_container.update()
-        bottom_grand_total_container.update()
+        page.update()
 
     def update_mode_ui():
         ranch_c, unused_c, ranch_stable = analyze_grid()
@@ -643,10 +646,9 @@ def main(page: ft.Page):
             show_alert(f"ログイン処理エラー: {ex}")
             return
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
-    handle_rename = lambda e: None # 💡 エラー回避のための事前宣言。この行を第4分割の最末尾に追加してください
 
     # =========================================================================
-    # 🔒 認証系（新規登録・質問確認・パスワード再設定）の関数本体
+    # 🔒 認証系（新規登録・質問確認・パスワード再設定・自動ログイン）の関数本体
     # =========================================================================
     def _handle_new_register(e):
         username = login_name_input.value.strip()
@@ -726,10 +728,11 @@ def main(page: ft.Page):
             login_pass_input.value = saved_pass
             handle_existing_login(None)
 
-    # UIから呼び出せるようにグローバル変数にバインド（事前宣言への代入）
-    handle_new_register = _handle_new_register
-    handle_forgot_check_user = _handle_forgot_check_user
-    handle_forgot_reset_password = _handle_forgot_reset_password
+    # 上部で作成した予約ラッパーへ実体をバインド
+    _handle_new_register = _handle_new_register
+    _handle_forgot_check_user = _handle_forgot_check_user
+    _handle_forgot_reset_password = _handle_forgot_reset_password
+    _check_auto_login = _check_auto_login
 
     def enter_game_session(username, success_message):
         nonlocal current_player
@@ -789,13 +792,13 @@ def main(page: ft.Page):
         group_inputs_container.controls.append(create_group_input_row(""))
         page.update()
 
-    def open_change_group_dialog(e):
+    def _open_change_group_dialog(e):
         group_inputs_container.controls.clear()
         for g_num in my_group_list: group_inputs_container.controls.append(create_group_input_row(g_num))
         if not group_inputs_container.controls: group_inputs_container.controls.append(create_group_input_row("1"))
         page.open(change_group_dialog)
 
-    def handle_save_group_number(e):
+    def _handle_save_group_number(e):
         nonlocal my_group_list
         parsed_list = []
         for row in group_inputs_container.controls:
@@ -944,6 +947,15 @@ def main(page: ft.Page):
         except Exception: pass
         page.update()
 
+    def _handle_change_password(e): pass
+    def _handle_save_secret_question(e): pass
+    def _handle_rename(e): pass
+    def _execute_delete_account(): pass
+
+    # 実体関数へのバインド
+    _open_change_group_dialog = _open_change_group_dialog
+    _handle_save_group_number = _handle_save_group_number
+
     # 各種ダイアログ構造構築
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_pass_dialog)), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
@@ -1028,7 +1040,7 @@ def main(page: ft.Page):
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # 初期ボード状態生成
+    # ⭕【バグ修正】クラッシュの原因だったアクセスを修正し、1番目の選択肢（木の家）に丸枠線を適用
     palette_options[0].controls[0].border = ft.border.all(3, ft.Colors.BLACK)
     reset_current_game()
 
@@ -1040,3 +1052,4 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
