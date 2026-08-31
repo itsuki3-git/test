@@ -14,9 +14,9 @@ def main(page: ft.Page):
     # =========================================================================
     # ⚠️ あなたのSupabaseの情報をここに貼り付けてください
     # =========================================================================
-    SUPABASE_URL = "https://supabase.co"
+    SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
-    # =========================================================================
+    # =========================================================================    
 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
