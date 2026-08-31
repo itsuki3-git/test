@@ -803,7 +803,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（タップ競合を完全に排除した最新版）
+    # 📊 マイページ履歴一覧の生成（タップ判定を遮断していたレイヤー構造を完全修正）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -819,17 +819,23 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ クリックイベントを安全にキックするバインディングラッパー
+                # ⭕ タップ時に関数を安全にキックするラッパー
                 def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
+                # 💡【超重要修正】判定を遮断させないため、GestureDetectorを一番外側（親）に変更！
+                # これにより、Containerの色やパディングに邪魔されず、カード全体のタップが100%通ります。
                 my_records_list.controls.append(
-                    ft.Container(
-                        content=ft.GestureDetector(
-                            on_tap=make_load_click(), # 💡 タップイベントを確実にキャッチ
+                    ft.GestureDetector(
+                        on_tap=make_load_click(), # 一番外側でタップを確実にキャッチ
+                        content=ft.Container(
+                            padding=12, 
+                            border=ft.border.all(1, ft.Colors.BLUE_100), 
+                            border_radius=8, 
+                            bgcolor=ft.Colors.BLUE_50,
                             content=ft.Row(controls=[
                                 ft.Column([
                                     ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
@@ -837,28 +843,27 @@ def main(page: ft.Page):
                                 ], expand=True),
                                 ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                        ),
-                        padding=12, 
-                        border=ft.border.all(1, ft.Colors.BLUE_100), 
-                        border_radius=8, 
-                        bgcolor=ft.Colors.BLUE_50
+                        )
                     )
                 )
             page.update()
 
-    # ⭕ 定義順の衝突・フリーズを100%回避するため、update_my_records_ui のすぐ直後に配置
+
+    # =========================================================================
+    # 📊 マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
+    # =========================================================================
     def show_record_detail_dialog(record):
         import json
         raw_game_data = record.get("game_data", "")
         
-        # ダイアログ専用の独立したローカル状態管理変数
+        # 1. ダイアログ専用のローカル状態管理変数
         local_agri = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # 独立したパレット状態（インデックス指定で安全に木の家を取得）
-        dialog_current_mode = "COLOR"  
-        dialog_selected_color = PALETTE_INFO[0]["color"] 
+        # ダイアログ専用の独立パレット状態
+        dialog_current_mode = "COLOR"  # "COLOR" または "LINE"
+        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 インデックス指定で安全に「木の家」を取得
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -867,11 +872,12 @@ def main(page: ft.Page):
         D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
         D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
 
+        # 記録当時の盤面を格納する配列（デフォルトは空のグレー盤面）
         dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
-        # 💡 記録当時の保存データをローカル配列へ100%完全ロード
+        # 💡 記録当時の保存数値をローカル変数へ100%完全ロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
@@ -887,13 +893,13 @@ def main(page: ft.Page):
         card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
-        # 内蔵パレットの切り替えイベント
+        # --- 2. ダイアログ内専用パレットの切り替えイベント群 ---
         def on_d_palette_click(e):
             nonlocal dialog_selected_color, dialog_current_mode
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None 
+                p_col.controls[0].border = None # Containerの外枠線をクリア
                 p_col.controls[0].update()
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             e.control.update()
@@ -909,7 +915,7 @@ def main(page: ft.Page):
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             d_line_mode_btn.update()
 
-        # 内蔵パレットUIの組み立て
+        # パレットボタン群の生成
         d_palette_options = []
         for i, info in enumerate(PALETTE_INFO):
             border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
@@ -921,7 +927,7 @@ def main(page: ft.Page):
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
         d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
 
-        # ミニチュア盤面の組み立て
+        # --- 3. ミニサイズ盤面ボードの組み立て ---
         d_cell_dict = {}
         d_horiz_dict = {}
         d_vert_dict = {}
@@ -974,7 +980,7 @@ def main(page: ft.Page):
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
 
-        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1114,6 +1120,7 @@ def main(page: ft.Page):
         
         # ⭕ 最新のFlet仕様（競合クラッシュを起こさない安全なオープン命令）
         page.open(target_dialog)
+
 
     # =========================================================================
     # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
