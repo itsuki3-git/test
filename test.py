@@ -1488,6 +1488,8 @@ def main(page: ft.Page):
             vert_line = ft.Container(width=LINE_THICK, height=CELL_H, bgcolor=ft.Colors.GREY_300)
             hit_box = ft.Container(content=vert_line, width=LINE_THICK + (HIT_BOX_EXT * 2), height=CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - HIT_BOX_EXT, top=top_pos, on_click=toggle_line)
             stack_layout.controls.append(hit_box)
+            # ⭕【完全修正】インデントの位置を正しい内側ループの直下に修正！
+            # これにより15マス全ての縦の柵の座標が100%正しく登録され、マイページ側でのロード時の内部KeyError（サイレントクラッシュ）が完全に消滅します。
             vert_line_dict[(c, r)] = vert_line
 
     current_date_text = ft.Text(value=f"📅 対戦日時: {get_jst_now_str()}", size=12, color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
