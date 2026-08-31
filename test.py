@@ -318,49 +318,198 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
 
-    # ⭕ マイページ内で完結する、メモの確認・上書き修正専用のダイアログシステム
+    # ⭕ マイページ内で「得点（盤面、資源、カード）」と「メモ」をすべて直接修正・自動再計算できるダイアログ
     def show_record_detail_dialog(record):
+        # 過去のゲームデータをJSONからデコード（ない場合は現在の設定から空の枠を作る）
+        import json
+        raw_game_data = record.get("game_data", "")
+        
+        # ダイアログ専用のローカル入力用変数を作成（元のボードの状態を壊さないため）
+        local_agri = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
+        local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
+        local_memo = record.get("memo", "")
+        
+        # 過去の盤面スコアや手入力データが存在すれば展開
+        saved_cells_pack = None
+        if raw_game_data:
+            try:
+                board_pack = json.loads(raw_game_data)
+                local_agri.update(board_pack.get("agri_inputs", {}))
+                local_card.update(board_pack.get("card_inputs", {}))
+                saved_cells_pack = board_pack # 盤面のグラフィックデータ（色、柵）を保持
+            except Exception:
+                pass
+
+        # --- 1. UI入力コンポーネントの作成 ---
         detail_memo_input = ft.TextField(
-            label="対戦メモの編集",
-            value=record.get("memo", ""),
-            multiline=True,
-            min_lines=2,
-            max_lines=5,
-            text_size=13,
-            content_padding=10
+            label="対戦メモ", value=local_memo,
+            multiline=True, min_lines=1, max_lines=3, text_size=13, content_padding=8
+        )
+        
+        # 資源・家族の入力欄
+        agri_fields = {}
+        for name, current_val in local_agri.items():
+            agri_fields[name] = ft.TextField(
+                value=str(current_val), label=name, width=85, height=40,
+                text_size=12, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER
+            )
+            
+        # カードボーナスの入力欄
+        card_fields = {}
+        for name, current_val in local_card.items():
+            card_fields[name] = ft.TextField(
+                value=str(current_val), label=name, width=95, height=40,
+                text_size=12, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER
+            )
+
+        # 表示用の点数ラベル
+        total_score_preview = ft.Text(
+            value=f"合計得点: {record.get('final_score')} 点", 
+            size=18, weight="bold", color=ft.Colors.BLUE_700
         )
 
-        def save_edited_memo(e):
+        # --- 2. ダイアログ内での再計算ロジック ---
+        def get_local_agri_subtotal(inputs):
+            sub = 0
+            for name, count in inputs.items():
+                score = -1
+                if name == "小麦":
+                    if count == 0: score = -1
+                    elif count <= 3: score = 1
+                    elif count <= 5: score = 2
+                    elif count <= 7: score = 3
+                    else: score = 4
+                elif name == "野菜":
+                    if count == 0: score = -1
+                    elif count == 1: score = 1
+                    elif count == 2: score = 2
+                    elif count == 3: score = 3
+                    else: score = 4
+                elif name == "羊":
+                    if count == 0: score = -1
+                    elif count <= 3: score = 1
+                    elif count <= 5: score = 2
+                    elif count <= 7: score = 3
+                    else: score = 4
+                elif name == "猪":
+                    if count == 0: score = -1
+                    elif count <= 2: score = 1
+                    elif count <= 4: score = 2
+                    elif count <= 6: score = 3
+                    else: score = 4
+                elif name == "牛":
+                    if count == 0: score = -1
+                    elif count == 1: score = 1
+                    elif count <= 3: score = 2
+                    elif count <= 5: score = 3
+                    else: score = 4
+                elif name == "家族の数": score = count * 3
+                elif name == "乞食の枚数": score = count * -3
+                sub += score
+            return sub
+
+        # 入力値が変わるたびに合計を計算するヘルパー
+        def recalculate_dialog_score():
+            # 現在のダイアログのTextFieldから数値を集計
+            temp_agri = {}
+            for k, field in agri_fields.items():
+                try: temp_agri[k] = int(field.value) if field.value != "" else 0
+                except ValueError: temp_agri[k] = 0
+                
+            temp_card = {}
+            for k, field in card_fields.items():
+                try: temp_card[k] = int(field.value) if field.value != "" else 0
+                except ValueError: temp_card[k] = 0
+
+            # 盤面（畑、家、牧場、未使用）の基礎点数を元の記録から算出
+            # ※ もし過去データにグラフィックパックがない古いログの場合は、総得点から逆算
+            base_board_score = 0
+            if saved_cells_pack:
+                # 本体の得点計算式（table1_total）をシミュレート
+                # ※ 簡易的に「元の最終点数」から「元の資源点」と「元のカード点」を引いて盤面基礎点を固定
+                orig_agri = board_pack.get("agri_inputs", local_agri)
+                orig_card = board_pack.get("card_inputs", local_card)
+                base_board_score = int(record.get('final_score', 0)) - get_local_agri_subtotal(orig_agri) - sum(orig_card.values())
+            else:
+                base_board_score = int(record.get('final_score', 0)) - get_local_agri_subtotal(local_agri) - sum(local_card.values())
+
+            new_total = base_board_score + get_local_agri_subtotal(temp_agri) + sum(temp_card.values())
+            total_score_preview.value = f"合計得点: {new_total} 点"
+            total_score_preview.update()
+            return new_total, temp_agri, temp_card
+
+        # 各種入力が変更されたら数値を更新
+        for field in list(agri_fields.values()) + list(card_fields.values()):
+            field.on_change = lambda e: recalculate_dialog_score()
+
+        # --- 3. 修正データの上書き保存（UPDATE）処理 ---
+        def save_edited_record(e):
             try:
+                # 最終的な数値を取得
+                final_score, updated_agri, updated_card = recalculate_dialog_score()
                 new_memo_text = detail_memo_input.value.strip()
-                # ⭕ 得点計算ボードに影響を与えず、このスコアの「memo」だけをSupabaseへ直接上書き(UPDATE)
-                supabase.table("records").update({"memo": new_memo_text}).eq("id", record["id"]).execute()
+
+                # 新しい内部用game_dataパックを再構築（既存のマス目・柵の色グラフィックを維持）
+                new_board_pack = {
+                    "cells": saved_cells_pack.get("cells", []) if saved_cells_pack else [],
+                    "horiz": saved_cells_pack.get("horiz", []) if saved_cells_pack else [],
+                    "vert": saved_cells_pack.get("vert", []) if saved_cells_pack else [],
+                    "agri_inputs": updated_agri,
+                    "card_inputs": updated_card,
+                    "card_details": saved_cells_pack.get("card_details", {}) if saved_cells_pack else {"職業":[],"小さい進歩":[],"大きい進歩":[]}
+                }
+                new_json_str = json.dumps(new_board_pack)
+
+                # Supabaseに上書きUPDATEを送信
+                supabase.table("records").update({
+                    "final_score": final_score,
+                    "memo": new_memo_text,
+                    "game_data": new_json_str
+                }).eq("id", record["id"]).execute()
+
                 page.close(page.dialog)
-                update_my_records_ui() # マイページの一覧を最新状態に再描画
-                page.overlay.append(ft.SnackBar(ft.Text("📝 メモの内容をマイページで更新しました！"), open=True))
+                update_my_records_ui() # マイページ履歴一覧の再描画
+                page.overlay.append(ft.SnackBar(ft.Text("📊 スコアと資源の変更を上書き保存しました！"), open=True))
                 page.update()
             except Exception as ex:
-                show_alert(f"メモの更新に失敗しました: {ex}")
+                show_alert(f"修正データの保存に失敗しました: {ex}")
 
+        # --- 4. UIグリッドの配置（コンパクトに整列） ---
+        agri_grid = ft.Row(
+            controls=list(agri_fields.values()), 
+            wrap=True, spacing=6, alignment=ft.MainAxisAlignment.START
+        )
+        card_grid = ft.Row(
+            controls=list(card_fields.values()), 
+            wrap=True, spacing=6, alignment=ft.MainAxisAlignment.START
+        )
+
+        # ダイアログの中身構造を組み立て
         page.dialog = ft.AlertDialog(
-            title=ft.Text("📊 スコア詳細とメモ変更", weight="bold", size=16),
+            title=ft.Text("📊 過去スコアデータの直接修正", weight="bold", size=16),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"プレイヤー: {record.get('player')}", size=14, color=ft.Colors.BLUE_GREY_800),
-                    ft.Text(f"最終合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700),
-                    ft.Text(f"登録日時: {record.get('date')}", size=12, color=ft.Colors.GREY_600),
-                    ft.Divider(height=15),
+                    ft.Text(f"📅 登録日時: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    total_score_preview,
+                    ft.Divider(height=10),
+                    ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    agri_grid,
+                    ft.Container(height=5),
+                    ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    card_grid,
+                    ft.Divider(height=10),
                     detail_memo_input
-                ], spacing=10, tight=True),
-                width=320
+                ], spacing=8, tight=True),
+                width=340
             ),
             actions=[
                 ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
-                ft.ElevatedButton("変更を保存", on_click=save_edited_memo, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+                ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
         page.open(page.dialog)
+
 
 
     def save_current_game(e):
