@@ -565,30 +565,42 @@ def main(page: ft.Page):
         )
         count_table3.rows = rows
 
-    # ⭕【バグ修正】キーボードから直接入力した数値を内部変数へ確実に反映し、リアルタイム計算
+    # ⭕【完全連動・修正版】カードボーナスの手入力値をリアルタイムに表と総合点へ反映
     def on_card_input_change(key, val):
         try: card_inputs[key] = int(val) if val != "" else 0
         except ValueError: card_inputs[key] = 0
         
+        # 1. 牧場グリッドの状態を解析して表1（盤面項目）を再計算
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
         
-        # フォームの再描画によるフリーズを防ぐため、コンテナ単位で効率的にリフレッシュ
-        table_container.update()
+        # 2. 表3（カードボーナス）の「合計点」の行を最新の数値に書き換える
+        update_data_table3()
+        
+        # 3. 画面最上部の「アグリコラ合計得点」の数字を書き換える
         refresh_grand_total_labels()
+        
+        # 4. Fletに画面全体を最新状態にピシッと再描画させる
         page.update()
 
-    # ⭕【バグ修正】2つ目の表も同様に、キーボード入力値をリアルタイムに合算
+    # ⭕【完全連動・修正版】資源・家族の手入力値をリアルタイムに表と総合点へ反映
     def on_input_change(key, val):
         try: agri_inputs[key] = int(val) if val != "" else 0
         except ValueError: agri_inputs[key] = 0
         
+        # 1. 牧場グリッドの状態を解析して表1（盤面項目）を再計算
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
         
-        table_container.update()
+        # 2. 表2（資源・家族の数）の各項目の「〇点」というテキスト表示を再計算して書き換える
+        update_data_table2()
+        
+        # 3. 画面最上部の「アグリコラ合計得点」の数字を書き換える
         refresh_grand_total_labels()
+        
+        # 4. Fletに画面全体を最新状態にピシッと再描画させる
         page.update()
+
 
     def update_mode_ui():
         ranch_c, unused_c, ranch_stable = analyze_grid()
