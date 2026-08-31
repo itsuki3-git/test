@@ -956,6 +956,121 @@ def main(page: ft.Page):
     _open_change_group_dialog = _open_change_group_dialog
     _handle_save_group_number = _handle_save_group_number
 
+        # =========================================================================
+    # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
+    # =========================================================================
+    def _handle_rename(e):
+        nonlocal current_player
+        if not current_player: return
+        new_name = edit_name_input.value.strip()
+        if not new_name:
+            show_alert("新しい名前を入力してください。")
+            return
+        if new_name == current_player:
+            page.close(change_name_dialog)
+            return
+        try:
+            existing = supabase.table("users").select("username").eq("username", new_name).execute()
+            if existing.data:
+                show_alert("その名前は既に使われています。")
+                return
+            supabase.table("users").update({"username": new_name}).eq("username", current_player).execute()
+            priv_res = supabase.table("privacy").select("*").execute()
+            if priv_res.data:
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").update({p_key: new_name}).eq(p_key, current_player).execute()
+            supabase.table("records").update({"player": new_name}).eq("player", current_player).execute()
+            current_player = new_name
+            logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
+            page.client_storage.set(STORAGE_REMEMBER_USER, new_name)
+            page.close(change_name_dialog)
+            update_all_uis()
+            page.overlay.append(ft.SnackBar(ft.Text(f"👤 名前を {new_name} に変更しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"名前変更失敗: {ex}")
+
+    def _handle_change_password(e):
+        if not current_player: return
+        old_pass = mypage_old_pass.value.strip()
+        new_pass = mypage_new_pass.value.strip()
+        if not old_pass or not new_pass:
+            show_alert("両方のパスワードを入力してください。")
+            return
+        if len(new_pass) < 4:
+            show_alert("新しいパスワードは4桁以上で入力してください。")
+            return
+        try:
+            hashed_old = hash_password(old_pass)
+            res = supabase.table("users").select("password").eq("username", current_player).execute()
+            if not res.data or res.data[0]["password"] != hashed_old:
+                show_alert("現在のパスワードが間違っています。")
+                return
+            hashed_new = hash_password(new_pass)
+            supabase.table("users").update({"password": hashed_new}).eq("username", current_player).execute()
+            mypage_old_pass.value = ""
+            mypage_new_pass.value = ""
+            page.close(change_pass_dialog)
+            page.client_storage.set(STORAGE_REMEMBER_PASS, new_pass)
+            page.overlay.append(ft.SnackBar(ft.Text("🔒 パスワードを変更しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"パスワード変更失敗: {ex}")
+
+    def _handle_save_secret_question(e):
+        if not current_player: return
+        question = mypage_question_input.value.strip()
+        answer = mypage_answer_input.value.strip()
+        if not question or not answer:
+            show_alert("質問と答えの両方を入力してください。")
+            return
+        try:
+            hashed_answer = hash_password(answer)
+            priv_res = supabase.table("privacy").select("*").eq("username", current_player).execute()
+            update_data = {"secret_question": question, "secret_answer": hashed_answer}
+            if priv_res.data:
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").update(update_data).eq(p_key, current_player).execute()
+            else:
+                update_data["username"] = current_player
+                update_data["group_number"] = "1"
+                supabase.table("privacy").insert(update_data).execute()
+            mypage_question_input.value = ""
+            mypage_answer_input.value = ""
+            page.close(secret_question_dialog)
+            page.overlay.append(ft.SnackBar(ft.Text("🛡️ 秘密の質問を設定しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"秘密の質問設定失敗: {ex}")
+
+    def _execute_delete_account():
+        nonlocal current_player
+        if not current_player: return
+        try:
+            supabase.table("records").delete().eq("player", current_player).execute()
+            priv_res = supabase.table("privacy").select("*").execute()
+            if priv_res.data:
+                p_key = "username" if "username" in priv_res.data[0] else "player"
+                supabase.table("privacy").delete().eq(p_key, current_player).execute()
+            supabase.table("users").delete().eq("username", current_player).execute()
+            page.client_storage.remove(STORAGE_REMEMBER_USER)
+            page.client_storage.remove(STORAGE_REMEMBER_PASS)
+            current_player = None
+            page.close(confirm_delete_dialog)
+            page.controls.clear()
+            page.add(login_view)
+            page.overlay.append(ft.SnackBar(ft.Text("⚠️ アカウントを完全に削除しました"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"アカウント削除失敗: {ex}")
+
+    # 上部で作成した予約ラッパー（第1分割内の宣言）に紐付け
+    handle_rename = _handle_rename
+    handle_change_password = _handle_change_password
+    handle_save_secret_question = _handle_save_secret_question
+    execute_delete_account = _execute_delete_account
+
+
     # 各種ダイアログ構造構築
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
     change_pass_dialog = ft.AlertDialog(title=ft.Text("🔒 パスワードの変更"), content=ft.Container(content=ft.Column([mypage_old_pass, mypage_new_pass], spacing=10, tight=True), width=320, height=140), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_pass_dialog)), ft.ElevatedButton("変更を実行", on_click=handle_change_password, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
