@@ -318,7 +318,7 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
 
-    # ⭕ マイページ内で完結！専用パレットと柵切り替えを内蔵したグラフィカル修正ダイアログ
+    # ⭕ 【完全修正版】専用パレット内蔵・スクロール対応・デフォルト再現型の修正ダイアログ
     def show_record_detail_dialog(record):
         import json
         raw_game_data = record.get("game_data", "")
@@ -328,9 +328,9 @@ def main(page: ft.Page):
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # ダイアログ専用のパレット状態（メイン画面から独立して動作）
+        # ダイアログ専用の独立パレット状態
         dialog_current_mode = "COLOR"  # "COLOR" または "LINE"
-        dialog_selected_color = PALETTE_INFO[0]["color"] # デフォルトは木の家
+        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 リストの0番目（木の家）を正しく指定
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -339,16 +339,17 @@ def main(page: ft.Page):
         D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
         D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
 
-        # デフォルトは記録当時のもの（データがない古いログ用は空枠）
+        # 記録当時の盤面を格納する配列（デフォルトは空のグレー盤面）
         dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
+        # 💡 記録当時の保存数値をローカル変数へ100%完全ロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
-                local_agri.update(board_pack.get("agri_inputs", {}))
-                local_card.update(board_pack.get("card_inputs", {}))
+                if "agri_inputs" in board_pack: local_agri.update(board_pack["agri_inputs"])
+                if "card_inputs" in board_pack: local_card.update(board_pack["card_inputs"])
                 if "cells" in board_pack and board_pack["cells"]: dialog_cell_bgcolors = board_pack["cells"]
                 if "horiz" in board_pack and board_pack["horiz"]: dialog_horiz_bgcolors = board_pack["horiz"]
                 if "vert" in board_pack and board_pack["vert"]: dialog_vert_bgcolors = board_pack["vert"]
@@ -359,12 +360,13 @@ def main(page: ft.Page):
         card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
-        # --- 2. ダイアログ内専用パレットのクリックイベント群 ---
+        # --- 2. ダイアログ内専用パレットの切り替えイベント群 ---
         def on_d_palette_click(e):
             nonlocal dialog_selected_color, dialog_current_mode
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
-            for p_col in d_palette_options: p_col.controls[0].border = None
+            for p_col in d_palette_options: 
+                p_col.controls[0].border = None # 💡 Column内の外枠をリセット
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
             page.update()
@@ -372,19 +374,21 @@ def main(page: ft.Page):
         def on_d_line_mode_click(e):
             nonlocal dialog_current_mode
             dialog_current_mode = "LINE"
-            for p_col in d_palette_options: p_col.controls[0].border = None
+            for p_col in d_palette_options: 
+                p_col.controls[0].border = None
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             page.update()
 
-        # ダイアログ専用のパレットUI組み立て
+        # パレットボタン群の生成
         d_palette_options = []
         for info in PALETTE_INFO:
             btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], on_click=on_d_palette_click)
-            lbl = ft.Text(info["name"][:1], size=7, weight="bold") # 1文字に縮小
+            lbl = ft.Text(info["name"][:1], size=7, weight="bold")
             d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
         
-        # 初期選択状態枠の付与
+        # 最初の木の家に選択枠線をつけておく
         d_palette_options[0].controls[0].border = ft.border.all(2, ft.Colors.BLACK)
+        
         d_palette_row = ft.Row(controls=d_palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=6)
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
         d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
@@ -442,7 +446,7 @@ def main(page: ft.Page):
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
 
-        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -464,7 +468,7 @@ def main(page: ft.Page):
                         if not visited[(curr_r, curr_c - 1)]: visited[(curr_r, curr_c - 1)] = True; queue.append((curr_r, curr_c - 1))
                 if curr_c < COLS and curr_c + 1 < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
                     if d_vert_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
-                        if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, curr_c + 1))
+                        if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, ft.Colors.BROWN_700))
             u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and d_cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100)
             r_count, s_count = 0, 0
             for r in range(ROWS):
@@ -518,7 +522,7 @@ def main(page: ft.Page):
             total_score_preview.update()
             return new_total, t_agri, t_card
 
-        # テキスト変更時のイベント紐付け
+            # テキスト変更時のイベント紐付け
         for field in list(agri_fields.values()) + list(card_fields.values()):
             field.on_change = lambda e: recalculate_dialog_score()
 
@@ -554,6 +558,9 @@ def main(page: ft.Page):
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
         card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
+        # 💡 初期表示で記録当時のデフォルト数値をテキスト欄と合計点に完全再現ロードする
+        recalculate_dialog_score()
+
         page.dialog = ft.AlertDialog(
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
@@ -562,7 +569,7 @@ def main(page: ft.Page):
                     total_score_preview,
                     ft.Divider(height=10),
                     ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                    ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), # ⭕ 内蔵コントロールバーの追加
+                    ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
                     ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
                     ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     agri_grid,
@@ -570,8 +577,9 @@ def main(page: ft.Page):
                     card_grid,
                     ft.Divider(height=10),
                     detail_memo_input
-                ], spacing=6, tight=True),
-                width=350
+                ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO), # ⭕ 縦スクロールを完全に許可
+                width=350,
+                height=450 # 💡 スクロール枠を安定させるためのコンテナ高さ固定
             ),
             actions=[
                 ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
@@ -580,6 +588,7 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         page.open(page.dialog)
+
 
 
 
