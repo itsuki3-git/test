@@ -1179,9 +1179,17 @@ def main(page: ft.Page):
             stack_layout.controls.append(hit_box)
             vert_line_dict[(c, r)] = vert_line
 
-    # ⭕ 新設：一番上の日時表示とメモ入力欄
+    # ⭕ 改行と複数行入力（縦幅の自動拡張）に対応したメモ入力欄
     current_date_text = ft.Text(value=f"📅 対戦日時: {get_jst_now_str()}", size=12, color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
-    game_memo_input = ft.TextField(label="対戦メモ・コメント（例：〇〇カードコンボなど）", hint_text="記録と一緒に保存されます", multiline=False, text_size=13, height=45, content_padding=10)
+    game_memo_input = ft.TextField(
+        label="対戦メモ・コメント", 
+        hint_text="エンターで改行できます。記録と一緒に保存されます", 
+        multiline=True,          # ⭕ 複数行の入力を許可
+        min_lines=1,             # ⭕ 初期状態の行数
+        max_lines=4,             # ⭕ 最大で4行分まで自動で縦に広がります
+        text_size=13, 
+        content_padding=10
+    )
 
     # ⭕ 新設：一番下の常時総合計表示エリア
     bottom_grand_total_display = ft.Text(value="0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
