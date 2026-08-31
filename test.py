@@ -676,6 +676,13 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"パスワード再設定失敗: {ex}")
 
+    def _check_auto_login():
+        saved_user = page.client_storage.get(STORAGE_REMEMBER_USER)
+        saved_pass = page.client_storage.get(STORAGE_REMEMBER_PASS)
+        if saved_user and saved_pass:
+            login_name_input.value = saved_user
+            login_pass_input.value = saved_pass
+            handle_existing_login(None)
 
     # UIから呼び出せるようにグローバル変数にバインド（事前宣言への代入）
     handle_new_register = _handle_new_register
