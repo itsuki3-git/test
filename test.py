@@ -292,14 +292,74 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ マイページの履歴表示にメモ書き（登録がある場合）を小さく表示できるように拡張
-                memo_str = f" ({record['memo']})" if "memo" in record and record["memo"] else ""
-                my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column(
-                    [ft.Text(f"合計得点: {record['final_score']} 点{memo_str}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                     ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True),
-                    ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
+                # ⭕ 詳細・修正ダイアログを開く関数
+                def make_open_detail_click(rec=record):
+                    return lambda e: show_record_detail_dialog(rec)
+
+                memo_str = record.get("memo", "")
+                memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
+                
+                # ⭕ 行全体をクリッカブル（InkWell）にし、タップしたら詳細を開くように変更
+                card_content = ft.InkWell(
+                    on_click=make_open_detail_click(),
+                    border_radius=8,
+                    content=ft.Padding(
+                        padding=12,
+                        content=ft.Row(controls=[
+                            ft.Column([
+                                ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                                ft.Text(value=f"{record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
+                            ], expand=True),
+                            ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                    )
+                )
+                my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
+
+    # ⭕ 新設：選択されたスコアの詳細確認とメモを直接アップデートするダイアログシステム
+    def show_record_detail_dialog(record):
+        detail_memo_input = ft.TextField(
+            label="対戦メモの編集",
+            value=record.get("memo", ""),
+            multiline=True,
+            min_lines=2,
+            max_lines=5,
+            text_size=13,
+            content_padding=10
+        )
+
+        def save_edited_memo(e):
+            try:
+                new_memo_text = detail_memo_input.value.strip()
+                # Supabaseの当該レコード(id)のmemoカラムを上書き更新
+                supabase.table("records").update({"memo": new_memo_text}).eq("id", record["id"]).execute()
+                page.close(page.dialog)
+                update_my_records_ui() # 履歴一覧を再描画
+                page.overlay.append(ft.SnackBar(ft.Text("📝 メモの内容を更新しました！"), open=True))
+                page.update()
+            except Exception as ex:
+                show_alert(f"メモの更新に失敗しました: {ex}")
+
+        page.dialog = ft.AlertDialog(
+            title=ft.Text("📊 スコア詳細とメモ変更", weight="bold", size=16),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text(f"プレイヤー: {record.get('player')}", size=14, color=ft.Colors.BLUE_GREY_800),
+                    ft.Text(f"最終合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700),
+                    ft.Text(f"登録日時: {record.get('date')}", size=12, color=ft.Colors.GREY_600),
+                    ft.Divider(height=15),
+                    detail_memo_input
+                ], spacing=10, tight=True),
+                width=320
+            ),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
+                ft.ElevatedButton("変更を保存", on_click=save_edited_memo, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+        page.open(page.dialog)
 
     def save_current_game(e):
         if not current_player: return
@@ -1179,19 +1239,17 @@ def main(page: ft.Page):
             stack_layout.controls.append(hit_box)
             vert_line_dict[(c, r)] = vert_line
 
-    # ⭕ 改行と複数行入力（縦幅の自動拡張）に対応したメモ入力欄
     current_date_text = ft.Text(value=f"📅 対戦日時: {get_jst_now_str()}", size=12, color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
     game_memo_input = ft.TextField(
         label="対戦メモ・コメント", 
         hint_text="エンターで改行できます。記録と一緒に保存されます", 
-        multiline=True,          # ⭕ 複数行の入力を許可
-        min_lines=1,             # ⭕ 初期状態の行数
-        max_lines=4,             # ⭕ 最大で4行分まで自動で縦に広がります
+        multiline=True,          
+        min_lines=1,             
+        max_lines=4,             
         text_size=13, 
         content_padding=10
     )
 
-    # ⭕ 新設：一番下の常時総合計表示エリア
     bottom_grand_total_display = ft.Text(value="0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
     bottom_score_row = ft.Container(
         content=ft.Row([
@@ -1210,7 +1268,7 @@ def main(page: ft.Page):
             ft.Container(content=count_table, alignment=ft.alignment.center),
             ft.Container(content=count_table2, alignment=ft.alignment.center),
             ft.Container(content=count_table3, alignment=ft.alignment.center),
-            ft.Container(content=bottom_score_row, alignment=ft.alignment.center, padding=ft.padding.symmetric(horizontal=10)), # ⭕ 下部スコア配置
+            ft.Container(content=bottom_score_row, alignment=ft.alignment.center, padding=ft.padding.symmetric(horizontal=10)), 
             ft.Container(content=ft.Row(controls=[
                 ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=lambda e: reset_current_game(), style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
                 ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
@@ -1218,7 +1276,28 @@ def main(page: ft.Page):
         ], expand=True, spacing=10
     )
 
-    mypage_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("スコア一覧", size=16, weight=ft.FontWeight.BOLD), padding=10), ft.Container(content=my_records_list, height=220), ft.Container(content=ft.Column([ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), ft.Row(controls=[ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=open_change_group_dialog, icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE), ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウント削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300)], wrap=True, spacing=5)]), padding=10, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10)], scroll=ft.ScrollMode.AUTO)
+    # ⭕ マイページ側の履歴レイアウト（expand配置でリストをスクロール可能に調整）
+    mypage_tab_view = ft.Column(
+        controls=[
+            ft.Container(content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), padding=ft.padding.only(left=10, top=10, bottom=5)), 
+            ft.Container(content=my_records_list, expand=True), # ⭕ 画面サイズに合わせて自動拡張
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), 
+                    ft.Row(controls=[
+                        ft.IconButton(ft.Icons.ACCOUNT_CIRCLE, tooltip="名前変更", on_click=lambda e: page.open(change_name_dialog), icon_color=ft.Colors.WHITE), 
+                        ft.IconButton(ft.Icons.NUMBERS, tooltip="グループ変更", on_click=open_change_group_dialog, icon_color=ft.Colors.WHITE), 
+                        ft.IconButton(ft.Icons.LOCK, tooltip="パスワード変更", on_click=lambda e: page.open(change_pass_dialog), icon_color=ft.Colors.WHITE), 
+                        ft.IconButton(ft.Icons.SHIELD, tooltip="秘密の質問", on_click=lambda e: page.open(secret_question_dialog), icon_color=ft.Colors.WHITE), 
+                        ft.IconButton(ft.Icons.DELETE_FOREVER, tooltip="アカウント削除", on_click=lambda e: page.open(confirm_delete_dialog), icon_color=ft.Colors.RED_300)
+                    ], wrap=True, spacing=5)
+                ]), 
+                padding=10, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10
+            )
+        ], 
+        expand=True
+    )
+    
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Row([ft.Container(content=ranking_title_text, expand=True), ranking_group_dropdown], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10), ft.Container(content=ranking_list, height=430)])
 
     main_tab_view = ft.Tabs(selected_index=0, animation_duration=300, tabs=[ft.Tab(text="得点計算ボード", icon=ft.Icons.CALCULATE, content=calc_tab_view), ft.Tab(text="マイページ", icon=ft.Icons.PERSON, content=mypage_tab_view), ft.Tab(text="ランキング", icon=ft.Icons.EMOJI_EVENTS, content=ranking_tab_view)], expand=True, on_change=lambda e: ((refresh_ranking_dropdown_options(), update_ranking_ui()) if main_tab_view.selected_index == 2 else None, page.update()))
@@ -1228,7 +1307,7 @@ def main(page: ft.Page):
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # ⭕【構造バグ修正】Columnリストへの正しい枠線適応
+    # パレットの初期枠線設定
     palette_options[0].controls[0].border = ft.border.all(3, ft.Colors.BLACK)
     reset_current_game()
 
@@ -1240,4 +1319,5 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+
 
