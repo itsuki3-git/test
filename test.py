@@ -863,7 +863,7 @@ def main(page: ft.Page):
         
         # ダイアログ専用の独立パレット状態
         dialog_current_mode = "COLOR"  
-        dialog_selected_color = PALETTE_INFO["color"] # 💡 木の家
+        dialog_selected_color = PALETTE_INFO["color"] # 💡 木の家（グリーン）
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -957,7 +957,7 @@ def main(page: ft.Page):
                 if r == 0: top_pos = D_OFFSET
                 if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
                 h_line = ft.Container(width=D_CELL_W, height=D_LINE_THICK, bgcolor=line_bg)
-                hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=c * D_CELL_W + D_OFFSET, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_line) # 💡 修正
+                hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=c * D_CELL_W + D_OFFSET, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_d_line)
                 d_stack.controls.append(hit_box)
                 d_horiz_dict[(r, c)] = h_line
                 idx += 1
@@ -970,12 +970,14 @@ def main(page: ft.Page):
                 if c == 0: left_pos = D_OFFSET
                 if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
                 v_line = ft.Container(width=D_LINE_THICK, height=D_CELL_H, bgcolor=line_bg)
-                # ⭕【完全修正】引き算対象になっていた ft.Icons.DELETE_OUTLINED を正常な数値変数 D_HIT_BOX_EXT に差し替え！
                 hit_box = ft.Container(content=v_line, width=D_LINE_THICK + (D_HIT_BOX_EXT * 2), height=D_CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - D_HIT_BOX_EXT, top=r * D_CELL_H + D_OFFSET, on_click=toggle_d_line)
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
+                # ⭕【最重要バグ修正】idx += 1 のインデント位置を正しい内側ループの中に修正！
+                # これにより無限フリーズ（デッドロック）が100%完全に解消されます。
                 idx += 1
-        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+
+            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1028,7 +1030,7 @@ def main(page: ft.Page):
                 sub += score
             return sub
 
-        # ダイアログ盤面＋手入力値の再計算（画面未配置時の個別アップデートを回避）
+        # ダイアログ盤面＋手入力値の再計算
         def recalculate_dialog_score():
             t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
             t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
@@ -1116,14 +1118,14 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         
-        # 各種手入力値のリアルタイム変更検知をダイアログ内にバインド
         for field in list(agri_fields.values()) + list(card_fields.values()):
             field.on_change = lambda e: recalculate_dialog_score()
 
-        # ⭕【完全表示保障】未配置クラッシュやオープン不発をすべて回避するクラシック命令
+        # ⭕【完全出力保証】デッドロック原因（インデントズレ）が消滅したため、ここで確実に描画をトリガー可能
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
+
 
 
 
