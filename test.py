@@ -13,56 +13,18 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
 
     # =========================================================================
-    # ⚠️ あなたのSupabaseの情報をここに貼り付けてください
+    # ⚠️ Supabase API専用エンドポイントURL
     # =========================================================================
     SUPABASE_URL = "https://tqufugshygdknyfgrsxh.supabase.co"
     SUPABASE_KEY = "sb_publishable_fMuDE8giATkTj2UOjCyThg_wowMJz0s"
     # =========================================================================
-
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    # =========================================================================
-    # 🚨【ダイアログ無反応バグを完全粉砕する事前ビルド（シングルトン構造）】
-    #   タップ時のサイレントクラッシュを防ぐため、アプリ起動時にUIの器を1回だけ生成します。
-    # =========================================================================
-    D_CELL_W, D_CELL_H = 40, 40
-    D_LINE_THICK = 3
-    D_HIT_BOX_EXT = 8
-    D_OFFSET = D_HIT_BOX_EXT
-    D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
-    D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
-
-    # ダイアログ内の各入力欄を最初から固定のグローバルインスタンスとして生成
-    detail_memo_input = ft.TextField(label="対戦メモ", value="", multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
-    total_score_preview = ft.Text(value="合計得点: 0 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
-    
-    # 資源フィールドとカードフィールドの事前固定生成
-    d_agri_names = ["小麦", "野菜", "羊", "猪", "牛", "家族の数", "乞食の枚数"]
-    d_card_names = ["職業", "小さい進歩", "大きい進歩"]
-    
-    agri_fields = {name: ft.TextField(value="0", label=name, width=75, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name in d_agri_names}
-    card_fields = {name: ft.TextField(value="0", label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name in d_card_names}
-
-    # ミニチュア盤面のコンポーネントも事前に完全に固定化
-    d_cell_dict = {}
-    d_horiz_dict = {}
-    d_vert_dict = {}
-    d_stack = ft.Stack(width=D_TOTAL_W, height=D_TOTAL_H)
-    
-    # ダイアログ専用の固定用パレット・コントロール状態
-    dialog_current_mode = "COLOR"
-    dialog_selected_color = PALETTE_INFO["color"] # 木の家
-
-    # 以下の固定ダイアログオブジェクト（target_dialog）の実体は、
-    # Pythonの読み込み順の関係上、このすぐ下ではなく【パーツB】の関数内で安全に1回だけ作成・保持されます。
-    target_dialog = None
-    current_editing_record = None # 現在編集中のレコードを保持
-
-    
+    current_player = None
     my_group_list = []
     editing_record_id = None
     
-    # 牧場管理グリッド用の定数設定
+    # 牧場管理グリッド用の定数設定（ダイアログビルドで使うため最優先で定義）
     CELL_W, CELL_H = 65, 65
     ROWS, COLS = 3, 5
     LINE_THICK = 4
@@ -87,7 +49,38 @@ def main(page: ft.Page):
     vert_line_dict = {}
     cell_dict = {}
 
-    # 入力数値を管理する辞書（統合版）
+    # =========================================================================
+    # 🚨【ダイアログ無反応バグを完全粉砕する事前ビルド（シングルトン構造）】
+    #   タップ時のサイレントクラッシュを防ぐため、アプリ起動時にUIの器を1回だけ生成します。
+    # =========================================================================
+    D_CELL_W, D_CELL_H = 40, 40
+    D_LINE_THICK = 3
+    D_HIT_BOX_EXT = 8
+    D_OFFSET = D_HIT_BOX_EXT
+    D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
+    D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
+
+    detail_memo_input = ft.TextField(label="対戦メモ", value="", multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
+    total_score_preview = ft.Text(value="合計得点: 0 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
+    
+    d_agri_names = ["小麦", "野菜", "羊", "猪", "牛", "家族の数", "乞食の枚数"]
+    d_card_names = ["職業", "小さい進歩", "大きい進歩"]
+    
+    agri_fields = {name: ft.TextField(value="0", label=name, width=75, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name in d_agri_names}
+    card_fields = {name: ft.TextField(value="0", label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name in d_card_names}
+
+    d_cell_dict = {}
+    d_horiz_dict = {}
+    d_vert_dict = {}
+    d_stack = ft.Stack(width=D_TOTAL_W, height=D_TOTAL_H)
+    
+    dialog_current_mode = "COLOR"
+    dialog_selected_color = PALETTE_INFO[0]["color"]
+
+    target_dialog = None
+    current_editing_record = None
+
+    # 入力数値を管理する辞書（メイン画面用）
     agri_inputs = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
     card_inputs = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
     card_details = {"職業": [], "小さい進歩": [], "大きい進歩": []}
@@ -99,10 +92,8 @@ def main(page: ft.Page):
     login_name_input = ft.TextField(label="プレイヤー名", hint_text="例: たろう")
     login_pass_input = ft.TextField(label="パスワード", password=True, can_reveal_password=True)
 
-    register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PERSON_ADD, on_click=lambda e: handle_new_register(e),
-                                     bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=140, height=45)
-    login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e),
-                                  bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=140, height=45)
+    register_btn = ft.ElevatedButton("新規登録", icon=ft.Icons.PERSON_ADD, on_click=lambda e: handle_new_register(e), bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE, width=140, height=45)
+    login_btn = ft.ElevatedButton("ログイン", icon=ft.Icons.LOGIN, on_click=lambda e: handle_existing_login(e), bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE, width=140, height=45)
 
     forgot_name_input = ft.TextField(label="プレイヤー名を入力")
     forgot_question_text = ft.Text(value="プレイヤー名を入力して「質問を確認」を押してください", color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
@@ -139,7 +130,7 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡 【重要】UI組み立て時の読み込み順エラー（NameError）を100%根絶するためのダミー関数予約ブロック
+    # 💡 【重要】UI組み立て時の読み込み順エラーを100%根絶するためのダミー関数予約ブロック
     def handle_rename(e): pass
     def handle_change_password(e): pass
     def handle_save_secret_question(e): pass
@@ -150,8 +141,9 @@ def main(page: ft.Page):
     def handle_forgot_reset_password(e): pass
     def save_current_game(e): pass
     def add_blank_group_input_row(e): pass
-    def open_change_group_dialog(e): pass
-
+    def handle_new_register(e): pass
+    def handle_existing_login(e): pass
+    def update_ranking_ui(): pass
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -357,7 +349,7 @@ def main(page: ft.Page):
             if name not in counts or name == "畑": continue
             count = counts[name]
             if count > 0:
-                score = count * 1 if name == "レンガの家" else (count * 2 if name == "石の家" else 0)
+                score = count * 1 if name == "レンガ的家" else (count * 2 if name == "石的家" else 0)
                 table1_subtotal += score
                 rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=info["color"] if info["color"] != ft.Colors.GREEN_400 else ft.Colors.GREEN_700)), ft.DataCell(ft.Text(f"{count} 個", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
         
@@ -382,8 +374,8 @@ def main(page: ft.Page):
             if name == "小麦": text_color = ft.Colors.AMBER_700
             elif name == "野菜": text_color = ft.Colors.DEEP_ORANGE_700
             elif name == "羊": text_color = ft.Colors.BLUE_GREY_500
-            elif name == "家族の数": text_color = ft.Colors.BLUE_700
-            elif name == "乞食の枚数": text_color = ft.Colors.RED_700
+            elif name == "家族的数": text_color = ft.Colors.BLUE_700
+            elif name == "乞食的枚数": text_color = ft.Colors.RED_700
 
             if name == "小麦":
                 if count == 0: score = -1
@@ -415,8 +407,8 @@ def main(page: ft.Page):
                 elif count <= 3: score = 2
                 elif count <= 5: score = 3
                 else: score = 4
-            elif name == "家族の数": score = count * 3
-            elif name == "乞食の枚数": score = count * -3
+            elif name == "家族的数": score = count * 3
+            elif name == "乞食的枚数": score = count * -3
 
             table2_subtotal += score
 
@@ -629,52 +621,6 @@ def main(page: ft.Page):
             else: actual_line.bgcolor = ft.Colors.BROWN_700
             update_mode_ui()
 
-    def handle_existing_login(e):
-        # 💡【重要修正】エラーの元凶であった nonlocal を完全に撤廃しました。
-        # 代わりに global を明示的に指定するか、直接代入を行うことで、
-        # Python 3.14の構造チェックによる起動エラーを100%確実に回避します。
-        global current_player, my_group_list
-        
-        input_name = login_name_input.value.strip()
-        input_pass = login_pass_input.value.strip()
-        if not input_name or not input_pass: return
-        try:
-            hashed_pass = hash_password(input_pass)
-            # 1. ユーザーの存在チェック
-            res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
-            if not res.data or len(res.data) == 0: 
-                show_alert("名前またはパスワードが間違っています。")
-                return
-            
-            page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
-            page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
-            
-            # 2. 自分のレコードだけをピンポイントで取得
-            priv_res = supabase.table("privacy").select("group_number").eq("username", input_name).execute()
-            
-            if priv_res.data and len(priv_res.data) > 0:
-                user_privacy_data = priv_res.data[0]
-                raw_group_str = str(user_privacy_data.get("group_number", "1"))
-                if input_name.lower() == "admin": raw_group_str = "0"
-                my_group_list = [int(x.strip()) for x in raw_group_str.replace("，", ",").split(",") if x.strip().isdigit()]
-            else:
-                if input_name.lower() == "admin":
-                    my_group_list = [0]
-                else:
-                    my_group_list = [1]
-                    try: supabase.table("privacy").insert({"username": input_name, "group_number": "1"}).execute()
-                    except Exception: pass
-                    
-            # 引数から安全に変数を書き換える
-            current_player = input_name
-                    
-        except Exception as ex: 
-            show_alert(f"ログイン処理エラー: {ex}")
-            return
-            
-        enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
-
-
     # =========================================================================
     # 🔒 認証系（新規登録・質問確認・パスワード再設定・自動ログイン）の関数本体
     # =========================================================================
@@ -762,7 +708,6 @@ def main(page: ft.Page):
         total_score = get_grand_total()
         memo_text = game_memo_input.value.strip() if game_memo_input.value else ""
         
-        # 🚜 現在の盤面の色、柵、手入力値をすべて1つのパックにパックしてシリアライズ
         board_pack = {
             "cells": [cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
             "horiz": [horiz_line_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
@@ -788,7 +733,7 @@ def main(page: ft.Page):
         
         reset_current_game()
         game_memo_input.value = ""
-        current_date_text.value = f"📅 対戦日時: {get_jst_now_str()}"
+        current_date_text.value = f"📅 对戦日時: {get_jst_now_str()}"
         
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(msg), open=True))
@@ -802,7 +747,7 @@ def main(page: ft.Page):
     save_current_game = _save_current_game
 
     def enter_game_session(username, success_message):
-        nonlocal current_player
+        global current_player
         current_player = username
         logged_in_user_text.value = f"👤 ログイン中: {current_player} さん"
         edit_name_input.value = current_player
@@ -819,7 +764,7 @@ def main(page: ft.Page):
         page.update()
 
     def handle_logout(e):
-        nonlocal current_player
+        global current_player
         current_player = None
         page.controls.clear()
         page.add(login_view)
@@ -845,7 +790,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（GestureDetectorを排除し、Containerクリックに統合）
+    # 📊 マイページ履歴一覧の生成（Containerクリックに統合）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -861,30 +806,24 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ クリック時に修正ダイアログを開くイベント関数
                 def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # 💡【エラーと不発の根本解決】
-                # GestureDetectorを完全に無くし、Container自体の「on_click」を使用します。
-                # 背景色bgcolorを設定したContainerにon_clickを直付けすることで、
-                # 空白部分を含めてカード全体のどこを押しても100%確実に反応し、かつエラーを絶対に起こしません！
                 my_records_list.controls.append(
                     ft.Container(
                         padding=12, 
                         border=ft.border.all(1, ft.Colors.BLUE_100), 
                         border_radius=8, 
                         bgcolor=ft.Colors.BLUE_50,
-                        on_click=make_load_click(), # ⭕ カード全体をどこでもタップ可能にする最強の設定
+                        on_click=make_load_click(),
                         content=ft.Row(controls=[
                             ft.Column([
                                 ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
                                 ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
                             ], expand=True),
-                            # 💡 削除ボタンのクリックが親のContainerのクリックに巻き込まれないように、e.stopPropagation()が不要な単独コントロールとして配置
                             ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                     )
@@ -892,17 +831,15 @@ def main(page: ft.Page):
             page.update()
 
     # =========================================================================
-    # 📊 マイページ履歴カードタップ時の処理関数（nonlocalエラー完全根絶版）
+    # 📊 マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
     # =========================================================================
     def show_record_detail_dialog(record):
         import json
-        # 💡【重要修正】エラーの元凶である nonlocal を完全に廃止しました。
-        # すでにメモリ上にある事前ビルドインスタンスを安全に直接操作します。
         global target_dialog, current_editing_record, dialog_current_mode, dialog_selected_color
         
         current_editing_record = record
         dialog_current_mode = "COLOR"
-        dialog_selected_color = PALETTE_INFO["color"]
+        dialog_selected_color = PALETTE_INFO[0]["color"]
 
         raw_game_data = record.get("game_data", "")
         
@@ -952,23 +889,216 @@ def main(page: ft.Page):
                     d_vert_dict[(c, r)].bgcolor = dialog_vert_bgcolors[idx]
                 idx += 1
 
-            # 6. ダイアログの「器（ガワ）」がまだ未生成なら、アプリ内で1回だけ組み立てて固定保持
+        # 6. ダイアログの「器（ガワ）」がまだ未生成なら、アプリ内で1回だけ組み立てて固定保持
         if target_dialog is None:
-            # （UI構築および各種イベントハンドラ、スコア計算・保存処理のコード）
-            # 詳細なコードの実装内容は提供元のファイルおよび参照先をご確認ください。
-            pass
+            # 内蔵パレットクリックイベント
+            def on_d_palette_click(e):
+                global dialog_selected_color, dialog_current_mode
+                dialog_current_mode = "COLOR"
+                dialog_selected_color = e.control.data
+                for p_col in d_palette_options: 
+                    p_col.controls.border = None 
+                e.control.border = ft.border.all(2, ft.Colors.BLACK)
+                d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
+                page.update()
+
+            def on_d_line_mode_click(e):
+                global dialog_current_mode
+                dialog_current_mode = "LINE"
+                for p_col in d_palette_options: 
+                    p_col.controls.border = None
+                d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
+                page.update()
+
+            # パレットボタンUIを1回だけアセンブル
+            d_palette_options = []
+            for i, info in enumerate(PALETTE_INFO):
+                border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
+                btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], border=border_style, on_click=on_d_palette_click)
+                lbl = ft.Text(info["name"][:1], size=7, weight="bold")
+                d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
+            
+            d_palette_row = ft.Row(controls=d_palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=6)
+            d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
+            d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
+
+            # ミニ盤面のマス目・柵のイベントバインドとStackへの配置
+            def on_d_cell_click(e):
+                if dialog_current_mode == "COLOR":
+                    e.control.bgcolor = ft.Colors.GREY_100 if e.control.bgcolor == dialog_selected_color else dialog_selected_color
+                    recalculate_dialog_score()
+
+            def toggle_d_line(e):
+                if dialog_current_mode == "LINE":
+                    line_node = e.control.content
+                    line_node.bgcolor = ft.Colors.GREY_300 if line_node.bgcolor == ft.Colors.BROWN_700 else ft.Colors.BROWN_700
+                    recalculate_dialog_score()
+
+            # セル、水平柵、垂直柵を安全にStackに登録
+            idx = 0
+            for r in range(ROWS):
+                for c in range(COLS):
+                    cell = ft.Container(content=ft.Text(f"{r * COLS + c + 1}", color=ft.Colors.GREY_400, size=9), alignment=ft.alignment.center, bgcolor=ft.Colors.GREY_100, width=D_CELL_W, height=D_CELL_H, left=c * D_CELL_W + D_OFFSET, top=r * D_CELL_H + D_OFFSET, on_click=on_d_cell_click)
+                    d_stack.controls.append(cell)
+                    d_cell_dict[(r, c)] = cell
+                    idx += 1
+
+            for r in range(ROWS + 1):
+                for c in range(COLS):
+                    top_pos = r * D_CELL_H - (D_LINE_THICK / 2) + D_OFFSET
+                    if r == 0: top_pos = D_OFFSET
+                    if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
+                    h_line = ft.Container(width=D_CELL_W, height=D_LINE_THICK, bgcolor=ft.Colors.GREY_300)
+                    hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=c * D_CELL_W + D_OFFSET, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_d_line)
+                    d_stack.controls.append(hit_box)
+                    d_horiz_dict[(r, c)] = h_line
+
+            for c in range(COLS + 1):
+                for r in range(ROWS):
+                    left_pos = c * D_CELL_W - (D_LINE_THICK / 2) + D_OFFSET
+                    if c == 0: left_pos = D_OFFSET
+                    if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
+                    v_line = ft.Container(width=D_LINE_THICK, height=D_CELL_H, bgcolor=ft.Colors.GREY_300)
+                    hit_box = ft.Container(content=v_line, width=D_LINE_THICK + (D_HIT_BOX_EXT * 2), height=D_CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - D_HIT_BOX_EXT, top=r * D_CELL_H + D_OFFSET, on_click=toggle_d_line)
+                    d_stack.controls.append(hit_box)
+                    d_vert_dict[(c, r)] = v_line
+
+            # ダイアログ専用スコア計算アルゴリズム本体
+            def analyze_d_grid():
+                visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
+                queue = []
+                for r in range(-1, ROWS + 1):
+                    for c in range(-1, COLS + 1):
+                        if r == -1 or r == ROWS or c == -1 or c == COLS:
+                            visited[(r, c)] = True; queue.append((r, c))
+                while queue:
+                    curr_r, curr_c = queue.pop(0)
+                    if curr_r > -1 and curr_r < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
+                        if d_horiz_dict[(curr_r, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r - 1, curr_c)]: visited[(curr_r - 1, curr_c)] = True; queue.append((curr_r - 1, curr_c))
+                    if curr_r < ROWS and curr_r + 1 < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
+                        if d_horiz_dict[(curr_r + 1, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r + 1, curr_c)]: visited[(curr_r + 1, curr_c)] = True; queue.append((curr_r + 1, curr_c))
+                    if curr_c > -1 and curr_c < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
+                        if d_vert_dict[(curr_c, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r, curr_c - 1)]: visited[(curr_r, curr_c - 1)] = True; queue.append((curr_r, curr_c - 1))
+                    if curr_c < COLS and curr_c + 1 < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
+                        if d_vert_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                            if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, curr_c + 1))
+                u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and d_cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100)
+                r_count, s_count = 0, 0
+                for r in range(ROWS):
+                    for c in range(COLS):
+                        if not visited[(r, c)]:
+                            r_count += 1; i_q = [(r, c)]; visited[(r, c)] = True; has_s = False
+                            while i_q:
+                                cr, cc = i_q.pop(0)
+                                if d_cell_dict[(cr, cc)].bgcolor == ft.Colors.LIGHT_BLUE_300: has_s = True
+                                if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
+                                if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
+                                if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
+                                if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
+                            if has_s: s_count += 1
+                return r_count, u_count, s_count
+
+            def get_local_agri_score(inputs):
+                sub = 0
+                for name, count in inputs.items():
+                    score = -1
+                    if name == "小麦": score = -1 if count==0 else (1 if count<=3 else (2 if count<=5 else (3 if count<=7 else 4)))
+                    elif name == "野菜": score = -1 if count==0 else (1 if count==1 else (2 if count==2 else (3 if count==3 else 4)))
+                    elif name == "羊": score = -1 if count==0 else (1 if count<=3 else (2 if count<=5 else (3 if count<=7 else 4)))
+                    elif name == "猪": score = -1 if count==0 else (1 if count<=2 else (2 if count<=4 else (3 if count<=6 else 4)))
+                    elif name == "牛": score = -1 if count==0 else (1 if count==1 else (2 if count<=3 else (3 if count<=5 else 4)))
+                    elif name == "家族の数": score = count * 3
+                    elif name == "乞食の枚数": score = count * -3
+                    sub += score
+                return sub
+
+            def recalculate_dialog_score():
+                t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
+                t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
+                c_counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
+                for cell in d_cell_dict.values():
+                    for info in PALETTE_INFO:
+                        if info["name"] in c_counts and cell.bgcolor == info["color"]: c_counts[info["name"]] += 1
+                r_c, u_c, s_c = analyze_d_grid()
+                f_score = -1 if c_counts["畑"]<=1 else (1 if c_counts["畑"]==2 else (2 if c_counts["畑"]==3 else (3 if c_counts["畑"]==4 else 4)))
+                r_score = -1 if r_c==0 else (min(r_c, 4))
+                st_score = min(s_c, 4) if s_c > 0 else 0
+                h_score = (c_counts["レンガの家"] * 1) + (c_counts["石の家"] * 2)
+                u_score = u_c * -1
+                board_total = f_score + r_score + st_score + h_score + u_score
+                new_total = board_total + get_local_agri_score(t_agri) + sum(t_card.values())
+                total_score_preview.value = f"合計得点: {new_total} 点"
+                if total_score_preview.page is not None: total_score_preview.update()
+                return new_total, t_agri, t_card
+
+            def save_edited_record(e):
+                try:
+                    final_score, updated_agri, updated_card = recalculate_dialog_score()
+                    new_board_pack = {
+                        "cells": [d_cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
+                        "horiz": [d_horiz_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
+                        "vert": [d_vert_dict[(c, r)].bgcolor for c in range(COLS + 1) for r in range(ROWS)],
+                        "agri_inputs": updated_agri,
+                        "card_inputs": updated_card,
+                        "card_details": {"職業":[],"smaller":[],"bigger":[]}
+                    }
+                    supabase.table("records").update({
+                        "final_score": final_score,
+                        "memo": detail_memo_input.value.strip(),
+                        "game_data": json.dumps(new_board_pack)
+                    }).eq("id", current_editing_record["id"]).execute()
+                    target_dialog.open = False
+                    page.update()
+                    update_my_records_ui()
+                    page.overlay.append(ft.SnackBar(ft.Text("🚜 変更を保存しました！"), open=True))
+                    page.update()
+                except Exception as ex:
+                    show_alert(f"保存失敗: {ex}")
+
+            # スコアイベント紐付け
+            for field in list(agri_fields.values()) + list(card_fields.values()):
+                field.on_change = lambda e: recalculate_dialog_score()
+
+            agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
+            card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
+
+            target_dialog = ft.AlertDialog(
+                title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
+                content=ft.Container(
+                    content=ft.Column([
+                        total_score_preview,
+                        ft.Divider(height=10),
+                        ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
+                        ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
+                        ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                        agri_grid,
+                        ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                        card_grid,
+                        ft.Divider(height=10),
+                        detail_memo_input
+                    ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
+                    width=350, height=450
+                ),
+                actions=[
+                    ft.TextButton("キャンセル", on_click=lambda e: (setattr(target_dialog, "open", False), page.update())),
+                    ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
 
         # 7. Flet公式の最前面出力命令で即時オープン
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
 
-
     # =========================================================================
     # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
     # =========================================================================
     def _handle_rename(e):
-        nonlocal current_player
+        global current_player
         if not current_player: return
         new_name = edit_name_input.value.strip()
         if not new_name:
@@ -1011,7 +1141,7 @@ def main(page: ft.Page):
         try:
             hashed_old = hash_password(old_pass)
             res = supabase.table("users").select("password").eq("username", current_player).execute()
-            if not res.data or res.data["password"] != hashed_old:
+            if not res.data or res.data[0]["password"] != hashed_old:
                 show_alert("現在のパスワードが間違っています。")
                 return
             hashed_new = hash_password(new_pass)
@@ -1052,7 +1182,7 @@ def main(page: ft.Page):
             show_alert(f"秘密の質問設定失敗: {ex}")
 
     def _execute_delete_account():
-        nonlocal current_player
+        global current_player
         if not current_player: return
         try:
             supabase.table("records").delete().eq("player", current_player).execute()
@@ -1072,48 +1202,11 @@ def main(page: ft.Page):
         except Exception as ex:
             show_alert(f"アカウント削除失敗: {ex}")
 
-    def _open_change_group_dialog(e):
-        group_inputs_container.controls.clear()
-        for g_num in my_group_list: group_inputs_container.controls.append(create_group_input_row(g_num))
-        if not group_inputs_container.controls: group_inputs_container.controls.append(create_group_input_row("1"))
-        page.open(change_group_dialog)
-
-        # =========================================================================
-    # 🔢 グループ管理ダイアログの動的行追加・削除ロジックの実体
-    # =========================================================================
-    def create_group_input_row(initial_value=""):
-        tf = ft.TextField(value=str(initial_value), label="グループ番号", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-        row = ft.Row(spacing=5)
-        row.controls = [tf, ft.IconButton(icon=ft.Icons.DELETE_OUTLINED, icon_color=ft.Colors.RED_400, on_click=lambda e: remove_group_input_row(row))]
-        return row
-
-    def remove_group_input_row(row_control):
-        if len(group_inputs_container.controls) <= 1: return
-        group_inputs_container.controls.remove(row_control)
-        page.update()
-
-    def _add_blank_group_input_row(e):
-        group_inputs_container.controls.append(create_group_input_row(""))
-        page.update()
-
-    def _open_change_group_dialog(e):
-        group_inputs_container.controls.clear()
-        for g_num in my_group_list: 
-            group_inputs_container.controls.append(create_group_input_row(g_num))
-        if not group_inputs_container.controls: 
-            group_inputs_container.controls.append(create_group_input_row("1"))
-        page.open(change_group_dialog)
-
-    # 💡 最上部の事前宣言（ボタンに紐づいている変数名）に、実体関数を確実にバインド
-    add_blank_group_input_row = _add_blank_group_input_row
-    open_change_group_dialog = _open_change_group_dialog
-
-
     def _handle_save_group_number(e):
-        nonlocal my_group_list
+        global my_group_list
         parsed_list = []
         for row in group_inputs_container.controls:
-            tf_control = row.controls[0] # 💡 インデックスの指定ミスを修正
+            tf_control = row.controls[0]
             val_str = tf_control.value.strip() if tf_control.value else ""
             if val_str.isdigit():
                 g_num = int(val_str)
@@ -1135,7 +1228,7 @@ def main(page: ft.Page):
     current_sort_ascending = False
 
     def handle_admin_table_sort(e):
-        nonlocal current_sort_column, current_sort_ascending
+        global current_sort_column, current_sort_ascending
         if current_sort_column == e.column_index:
             current_sort_ascending = not current_sort_ascending
         else:
@@ -1215,7 +1308,7 @@ def main(page: ft.Page):
             else:
                 for g in sorted(my_group_list):
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list) if my_group_list else None
+                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
         except Exception:
             ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
             ranking_group_dropdown.value = "1"
@@ -1263,8 +1356,6 @@ def main(page: ft.Page):
     handle_change_password = _handle_change_password
     handle_save_secret_question = _handle_save_secret_question
     execute_delete_account = _execute_delete_account
-    open_change_group_dialog = _open_change_group_dialog
-    handle_save_group_number = _handle_save_group_number
 
     # 各種ダイアログ構造構築
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
@@ -1282,6 +1373,36 @@ def main(page: ft.Page):
     admin_tab_view = ft.Column(controls=[ft.Container(content=ft.Text("🛠️ 管理者コントロールパネル", size=16, weight=ft.FontWeight.BOLD), padding=12), ft.Container(content=ft.Row([admin_search_input]), padding=5), ft.ListView(controls=[admin_data_table], expand=True)], expand=True)
 
     login_view = ft.Container(content=ft.Column(controls=[ft.Icon(ft.Icons.ACCOUNT_CIRCLE, size=80, color=ft.Colors.BLUE_600), ft.Text(value="プレイヤー認証", size=24, weight=ft.FontWeight.BOLD), ft.Container(height=15), ft.Container(content=login_name_input, width=300), ft.Container(content=login_pass_input, width=300), ft.Container(height=10), ft.Container(content=action_buttons_row, width=340), ft.Container(height=10), ft.TextButton("🔑 パスワードを忘れた場合はこちら", on_click=lambda e: page.open(forgot_dialog))], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10), padding=20, alignment=ft.alignment.center, expand=True, visible=True)
+
+    # =========================================================================
+    # 🔢 グループ管理ダイアログの動的行追加・削除ロジックの実体
+    # =========================================================================
+    def create_group_input_row(initial_value=""):
+        tf = ft.TextField(value=str(initial_value), label="グループ番号", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+        row = ft.Row(spacing=5)
+        row.controls = [tf, ft.IconButton(icon=ft.Icons.DELETE_OUTLINED, icon_color=ft.Colors.RED_400, on_click=lambda e: remove_group_input_row(row))]
+        return row
+
+    def remove_group_input_row(row_control):
+        if len(group_inputs_container.controls) <= 1: return
+        group_inputs_container.controls.remove(row_control)
+        page.update()
+
+    def _add_blank_group_input_row(e):
+        group_inputs_container.controls.append(create_group_input_row(""))
+        page.update()
+
+    def _open_change_group_dialog(e):
+        group_inputs_container.controls.clear()
+        for g_num in my_group_list: 
+            group_inputs_container.controls.append(create_group_input_row(g_num))
+        if not group_inputs_container.controls: 
+            group_inputs_container.controls.append(create_group_input_row("1"))
+        page.open(change_group_dialog)
+
+    # 💡 ボタン群に紐づいている変数名に実体関数を確実にバインド
+    add_blank_group_input_row = _add_blank_group_input_row
+    open_change_group_dialog = _open_change_group_dialog
 
     # 🚜 牧場・資源管理グリッドボードUI組み立て
     palette_options = []
@@ -1323,8 +1444,6 @@ def main(page: ft.Page):
             vert_line = ft.Container(width=LINE_THICK, height=CELL_H, bgcolor=ft.Colors.GREY_300)
             hit_box = ft.Container(content=vert_line, width=LINE_THICK + (HIT_BOX_EXT * 2), height=CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - HIT_BOX_EXT, top=top_pos, on_click=toggle_line)
             stack_layout.controls.append(hit_box)
-            # ⭕【完全修正】インデントの位置を正しい内側ループの直下に修正！
-            # これにより15マス全ての縦の柵の座標が100%正しく登録され、マイページ側でのロード時の内部KeyError（サイレントクラッシュ）が完全に消滅します。
             vert_line_dict[(c, r)] = vert_line
 
     current_date_text = ft.Text(value=f"📅 対戦日時: {get_jst_now_str()}", size=12, color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
@@ -1389,8 +1508,6 @@ def main(page: ft.Page):
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # ⭕【完全修正】リスト型変数に直接.borderを指定してクラッシュしていた記述を排除し、
-    # 各コンテナ要素に対してループで安全に境界線を設定するように修正
     if len(palette_options) > 0:
         for option in palette_options:
             if hasattr(option, 'border'):
