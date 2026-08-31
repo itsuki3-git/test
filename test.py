@@ -395,7 +395,6 @@ def main(page: ft.Page):
         # パレットボタン群の生成
         d_palette_options = []
         for i, info in enumerate(PALETTE_INFO):
-            # 💡 初期値（木の家）だけに黒枠をつけて作成
             border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
             btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], border=border_style, on_click=on_d_palette_click)
             lbl = ft.Text(info["name"][:1], size=7, weight="bold")
@@ -457,8 +456,7 @@ def main(page: ft.Page):
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
-
-            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -493,7 +491,7 @@ def main(page: ft.Page):
                             if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
                             if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
                             if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
-                            if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
+                            if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 charges and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
                         if has_s: s_count += 1
             return r_count, u_count, s_count
 
@@ -595,6 +593,7 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         page.open(page.dialog)
+
 
 
     def save_current_game(e):
