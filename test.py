@@ -863,7 +863,7 @@ def main(page: ft.Page):
         
         # ダイアログ専用の独立パレット状態
         dialog_current_mode = "COLOR"  
-        dialog_selected_color = PALETTE_INFO[0]["color"] # 安全に木の家の色を取得
+        dialog_selected_color = PALETTE_INFO["color"] # 💡 木の家
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -898,7 +898,7 @@ def main(page: ft.Page):
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None 
+                p_col.controls.border = None 
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
             page.update()
@@ -907,7 +907,7 @@ def main(page: ft.Page):
             nonlocal dialog_current_mode
             dialog_current_mode = "LINE"
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None
+                p_col.controls.border = None
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             page.update()
 
@@ -957,7 +957,7 @@ def main(page: ft.Page):
                 if r == 0: top_pos = D_OFFSET
                 if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
                 h_line = ft.Container(width=D_CELL_W, height=D_LINE_THICK, bgcolor=line_bg)
-                hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=c * D_CELL_W + D_OFFSET, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_d_line)
+                hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=c * D_CELL_W + D_OFFSET, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_line) # 💡 修正
                 d_stack.controls.append(hit_box)
                 d_horiz_dict[(r, c)] = h_line
                 idx += 1
@@ -970,15 +970,12 @@ def main(page: ft.Page):
                 if c == 0: left_pos = D_OFFSET
                 if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
                 v_line = ft.Container(width=D_LINE_THICK, height=D_CELL_H, bgcolor=line_bg)
+                # ⭕【完全修正】引き算対象になっていた ft.Icons.DELETE_OUTLINED を正常な数値変数 D_HIT_BOX_EXT に差し替え！
                 hit_box = ft.Container(content=v_line, width=D_LINE_THICK + (D_HIT_BOX_EXT * 2), height=D_CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - D_HIT_BOX_EXT, top=r * D_CELL_H + D_OFFSET, on_click=toggle_d_line)
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
-
-            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
-        # 💡【サイレントクラッシュバグの完全修正】
-        # ループ内で誤って ft.Colors オブジェクトを queue に突っ込んでいた処理を
-        # 正しいインデックス座標 (r, c) に修正し、裏でのフリーズ原因を100%排除しました。
+        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1096,7 +1093,7 @@ def main(page: ft.Page):
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 对戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
                     ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
@@ -1127,6 +1124,7 @@ def main(page: ft.Page):
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
+
 
 
     # =========================================================================
