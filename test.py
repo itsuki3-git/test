@@ -106,10 +106,16 @@ def main(page: ft.Page):
     _handle_forgot_reset_password = None
     _check_auto_login = None
 
+    # 💡 【決定版・事前宣言】UI作成時にエラーを起こさないよう、単純な空の関数として予約します
+    def handle_rename(e): pass
+    def handle_change_password(e): pass
+    def handle_save_secret_question(e): pass
+    def execute_delete_account(): pass
     def handle_new_register(e): _handle_new_register(e)
     def handle_forgot_check_user(e): _handle_forgot_check_user(e)
     def handle_forgot_reset_password(e): _handle_forgot_reset_password(e)
     def check_auto_login(): _check_auto_login()
+    
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
