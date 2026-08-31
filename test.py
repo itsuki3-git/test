@@ -281,6 +281,9 @@ def main(page: ft.Page):
 
     import json # 💡 盤面データを丸ごとパックするためにインポートを追加
 
+    # =========================================================================
+    # 📊 マイページ履歴一覧の生成（GestureDetectorの配置修正版）
+    # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
         if not current_player: return
@@ -295,30 +298,37 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ カードをタップしたときに詳細・修正ダイアログを開く関数
-                def make_open_detail_click(rec=record):
+                # ⭕ タップ時に関数を安全にキックするラッパー
+                def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                card_content = ft.GestureDetector(
-                    on_tap=make_open_detail_click(), # ⭕ タップで詳細ダイアログを開く
-                    content=ft.Container(
-                        padding=12,
-                        content=ft.Row(controls=[
-                            ft.Column([
-                                ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                                ft.Text(value=f"{record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
-                            ], expand=True),
-                            ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                # GestureDetectorをContainerの内側に配置し、カード全体がどこを押されても反応するように修正
+                my_records_list.controls.append(
+                    ft.Container(
+                        content=ft.GestureDetector(
+                            on_tap=make_load_click(),
+                            content=ft.Row(controls=[
+                                ft.Column([
+                                    ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                                    ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
+                                ], expand=True),
+                                ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                        ),
+                        padding=12, 
+                        border=ft.border.all(1, ft.Colors.BLUE_100), 
+                        border_radius=8, 
+                        bgcolor=ft.Colors.BLUE_50
                     )
                 )
-                my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
 
-    # ⭕ 【完全修正版】専用パレット内蔵・スクロール対応・デフォルト再現型の修正ダイアログ
+    # =========================================================================
+    # 📊 マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
+    # =========================================================================
     def show_record_detail_dialog(record):
         import json
         raw_game_data = record.get("game_data", "")
@@ -366,7 +376,7 @@ def main(page: ft.Page):
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None # 💡 Column内の外枠をリセット
+                p_col.controls[0].border = None # 💡 Containerの外枠をリセット
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
             page.update()
@@ -387,7 +397,7 @@ def main(page: ft.Page):
             d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
         
         # 最初の木の家に選択枠線をつけておく
-        d_palette_options[0].controls[0].border = ft.border.all(2, ft.Colors.BLACK)
+        d_palette_options[0].border = ft.border.all(2, ft.Colors.BLACK)
         
         d_palette_row = ft.Row(controls=d_palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=6)
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
@@ -468,7 +478,7 @@ def main(page: ft.Page):
                         if not visited[(curr_r, curr_c - 1)]: visited[(curr_r, curr_c - 1)] = True; queue.append((curr_r, curr_c - 1))
                 if curr_c < COLS and curr_c + 1 < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
                     if d_vert_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
-                        if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, ft.Colors.BROWN_700))
+                        if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, curr_c + 1))
             u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and d_cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100)
             r_count, s_count = 0, 0
             for r in range(ROWS):
@@ -522,16 +532,11 @@ def main(page: ft.Page):
             total_score_preview.update()
             return new_total, t_agri, t_card
 
-            # テキスト変更時のイベント紐付け
-        for field in list(agri_fields.values()) + list(card_fields.values()):
-            field.on_change = lambda e: recalculate_dialog_score()
-
         # --- 5. 修正データのUPDATE処理 ---
         def save_edited_record(e):
             try:
                 final_score, updated_agri, updated_card = recalculate_dialog_score()
                 
-                # 新しい盤面の色グラフィック状態を抽出して保存パックをシリアライズ
                 new_board_pack = {
                     "cells": [d_cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
                     "horiz": [d_horiz_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
@@ -558,14 +563,14 @@ def main(page: ft.Page):
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
         card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
-        # 💡 初期表示で記録当時のデフォルト数値をテキスト欄と合計点に完全再現ロードする
+        # 💡 初期ロード計算を実行して数値を同期
         recalculate_dialog_score()
 
         page.dialog = ft.AlertDialog(
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 对戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
                     ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
@@ -577,9 +582,9 @@ def main(page: ft.Page):
                     card_grid,
                     ft.Divider(height=10),
                     detail_memo_input
-                ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO), # ⭕ 縦スクロールを完全に許可
+                ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
                 width=350,
-                height=450 # 💡 スクロール枠を安定させるためのコンテナ高さ固定
+                height=450
             ),
             actions=[
                 ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
@@ -588,8 +593,6 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         page.open(page.dialog)
-
-
 
 
     def save_current_game(e):
