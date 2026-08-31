@@ -1033,7 +1033,7 @@ def main(page: ft.Page):
                 sub += score
             return sub
 
-        # ダイアログ盤面＋手入力値の再計算
+        # ダイアログ盤面＋手入力値の再計算（配置前エラー完全対策版）
         def recalculate_dialog_score():
             t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
             t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
@@ -1052,8 +1052,16 @@ def main(page: ft.Page):
             
             board_total = f_score + r_score + st_score + h_score + u_score
             new_total = board_total + get_local_agri_score(t_agri) + sum(t_card.values())
+            
+            # 💡【クラッシュの根本解決】
+            # ラベルに新しい点数を代入するだけに留めます。
             total_score_preview.value = f"合計得点: {new_total} 点"
-            total_score_preview.update()
+            
+            # まだダイアログが画面に表示（配置）されていない初期ロード時は、
+            # 個別の .update() をスキップしてエラーを完全に回避します！
+            if total_score_preview.page is not None:
+                total_score_preview.update()
+                
             return new_total, t_agri, t_card
 
         # --- 5. 修正データのUPDATE処理 ---
