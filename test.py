@@ -803,7 +803,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（タップのすり抜け・無反応バグを完全消滅）
+    # 📊 マイページ履歴一覧の生成（古いFlet環境でのクラッシュバグを完全修正）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -825,13 +825,14 @@ def main(page: ft.Page):
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # 💡【タップ不発バグの根本治療】
-                # behavior=ft.HitTestBehavior.OPAQUE を指定することで、
-                # カード内の文字がない隙間（空白部分）を押しても、100%確実にタップとして検知させます！
+                # 💡【修正ポイント】
+                # エラーの原因だった behavior=ft.HitTestBehavior.OPAQUE を完全に削除しました。
+                # 代わりに、GestureDetector自体の bgcolor を ft.Colors.TRANSPARENT（透明色）に
+                # 設定することで、古いFletバージョンでも100%確実に空白のタップを検知させます。
                 my_records_list.controls.append(
                     ft.GestureDetector(
                         on_tap=make_load_click(),
-                        behavior=ft.HitTestBehavior.OPAQUE, # ⭕ 空白を触っても確実に反応
+                        bgcolor=ft.Colors.TRANSPARENT, # ⭕ エラーを起こさず空白部分のタップを通す設定
                         content=ft.Container(
                             padding=12, 
                             border=ft.border.all(1, ft.Colors.BLUE_100), 
