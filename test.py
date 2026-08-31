@@ -262,10 +262,13 @@ def main(page: ft.Page):
     def refresh_grand_total_labels():
         gt = get_grand_total()
         score_display.value = str(gt)
+        # ⭕ 新設：一番下の常時総合計表示エリアにもリアルタイムに得点を反映
+        bottom_grand_total_display.value = str(gt)
 
     def calculate_total_score_ui_only():
         gt = get_grand_total()
         score_display.value = str(gt)
+        bottom_grand_total_display.value = str(gt)
         return gt
 
     def update_all_uis():
@@ -289,8 +292,10 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
+                # ⭕ マイページの履歴表示にメモ書き（登録がある場合）を小さく表示できるように拡張
+                memo_str = f" ({record['memo']})" if "memo" in record and record["memo"] else ""
                 my_records_list.controls.append(ft.Container(content=ft.Row(controls=[ft.Column(
-                    [ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                    [ft.Text(f"合計得点: {record['final_score']} 点{memo_str}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
                      ft.Text(value=f"保存日時: {record['date']}", size=11, color=ft.Colors.GREY_500)], expand=True),
                     ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, on_click=lambda e, idx=record["id"]: delete_saved_record(idx))],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=12, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
@@ -299,12 +304,26 @@ def main(page: ft.Page):
     def save_current_game(e):
         if not current_player: return
         total_score = get_grand_total()
+        # ⭕ 入力されたメモのテキストを取得
+        memo_text = game_memo_input.value.strip() if game_memo_input.value else ""
         try:
-            supabase.table("records").insert({"player": current_player, "final_score": total_score, "date": get_jst_now_str()}).execute()
+            # ⭕ Supabaseへのデータインサートの際、'memo' カラムにもデータを送信します
+            # ⚠️ Supabaseの records テーブルに memo カラム（text型）が未作成の場合は、あらかじめダッシュボード等で追加してください
+            supabase.table("records").insert({
+                "player": current_player, 
+                "final_score": total_score, 
+                "date": get_jst_now_str(),
+                "memo": memo_text
+            }).execute()
         except Exception as ex:
             show_alert(f"記録保存失敗: {ex}")
             return
+        
+        # ⭕ 保存が成功したら次の対戦に向けて日時を更新し、メモ欄をリセットします
         reset_current_game()
+        game_memo_input.value = ""
+        current_date_text.value = f"📅 対戦日時: {get_jst_now_str()}"
+        
         update_all_uis()
         page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
         page.update()
@@ -314,6 +333,7 @@ def main(page: ft.Page):
             supabase.table("records").delete().eq("id", target_id).execute()
         except Exception: return
         update_all_uis()
+
 
     def update_data_table(ranch_count, unused_count, ranch_stable_count):
         counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
@@ -1159,14 +1179,30 @@ def main(page: ft.Page):
             stack_layout.controls.append(hit_box)
             vert_line_dict[(c, r)] = vert_line
 
+    # ⭕ 新設：一番上の日時表示とメモ入力欄
+    current_date_text = ft.Text(value=f"📅 対戦日時: {get_jst_now_str()}", size=12, color=ft.Colors.BLUE_GREY_600, weight=ft.FontWeight.W_500)
+    game_memo_input = ft.TextField(label="対戦メモ・コメント（例：〇〇カードコンボなど）", hint_text="記録と一緒に保存されます", multiline=False, text_size=13, height=45, content_padding=10)
+
+    # ⭕ 新設：一番下の常時総合計表示エリア
+    bottom_grand_total_display = ft.Text(value="0", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
+    bottom_score_row = ft.Container(
+        content=ft.Row([
+            ft.Text("最終合計得点 :", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_GREY_800),
+            bottom_grand_total_display
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+        padding=12, bgcolor=ft.Colors.GREEN_50, border_radius=10, border=ft.border.all(1.5, ft.Colors.GREEN_200)
+    )
+
     calc_tab_view = ft.ListView(
         controls=[
+            ft.Container(content=ft.Column([current_date_text, game_memo_input], spacing=8), padding=ft.padding.only(left=10, right=10, top=5)),
             ft.Container(content=ft.Column([ft.Text("現在のアグリコラ合計得点", size=13, color=ft.Colors.GREY_600), score_display], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER), alignment=ft.alignment.center, padding=5),
             ft.Container(content=top_control_row, padding=5),
             ft.Container(content=stack_layout, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center),
             ft.Container(content=count_table, alignment=ft.alignment.center),
             ft.Container(content=count_table2, alignment=ft.alignment.center),
             ft.Container(content=count_table3, alignment=ft.alignment.center),
+            ft.Container(content=bottom_score_row, alignment=ft.alignment.center, padding=ft.padding.symmetric(horizontal=10)), # ⭕ 下部スコア配置
             ft.Container(content=ft.Row(controls=[
                 ft.OutlinedButton("リセット", icon=ft.Icons.REFRESH, on_click=lambda e: reset_current_game(), style=ft.ButtonStyle(color=ft.Colors.RED_600, icon_color=ft.Colors.RED_600)),
                 ft.ElevatedButton("ゲーム記録を保存", icon=ft.Icons.SAVE, on_click=save_current_game, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
@@ -1184,7 +1220,7 @@ def main(page: ft.Page):
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # ⭕【バグ修正】クラッシュの原因だったアクセスを修正し、1番目の選択肢（木の家）に丸枠線を適用
+    # ⭕【構造バグ修正】Columnリストへの正しい枠線適応
     palette_options[0].controls[0].border = ft.border.all(3, ft.Colors.BLACK)
     reset_current_game()
 
