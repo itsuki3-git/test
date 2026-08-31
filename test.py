@@ -863,7 +863,7 @@ def main(page: ft.Page):
         
         # ダイアログ専用の独立パレット状態
         dialog_current_mode = "COLOR"  
-        dialog_selected_color = PALETTE_INFO["color"] # 💡 木の家（グリーン）
+        dialog_selected_color = PALETTE_INFO["color"] # 木の家の色を指定
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -872,11 +872,12 @@ def main(page: ft.Page):
         D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
         D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
 
+        # 記録当時の盤面を格納する配列
         dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
-        # 記録当時の保存数値をローカル変数へロード
+        # 記録当時の保存数値をローカル変数へ完全ロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
@@ -892,7 +893,7 @@ def main(page: ft.Page):
         card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
-        # パレットの切り替えイベント（個別アップデートを排除し、安全に全体一括同期）
+        # パレットの切り替えイベント（一括画面アップデート方式）
         def on_d_palette_click(e):
             nonlocal dialog_selected_color, dialog_current_mode
             dialog_current_mode = "COLOR"
@@ -911,6 +912,7 @@ def main(page: ft.Page):
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             page.update()
 
+        # パレットボタン生成
         d_palette_options = []
         for i, info in enumerate(PALETTE_INFO):
             border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
@@ -922,7 +924,7 @@ def main(page: ft.Page):
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
         d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
 
-        # ミニ盤面の組み立て
+        # ミニチュア盤面ボード構築
         d_cell_dict = {}
         d_horiz_dict = {}
         d_vert_dict = {}
@@ -973,11 +975,8 @@ def main(page: ft.Page):
                 hit_box = ft.Container(content=v_line, width=D_LINE_THICK + (D_HIT_BOX_EXT * 2), height=D_CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - D_HIT_BOX_EXT, top=r * D_CELL_H + D_OFFSET, on_click=toggle_d_line)
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
-                # ⭕【最重要バグ修正】idx += 1 のインデント位置を正しい内側ループの中に修正！
-                # これにより無限フリーズ（デッドロック）が100%完全に解消されます。
                 idx += 1
-
-            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1010,7 +1009,7 @@ def main(page: ft.Page):
                             cr, cc = i_q.pop(0)
                             if d_cell_dict[(cr, cc)].bgcolor == ft.Colors.LIGHT_BLUE_300: has_s = True
                             if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
-                            if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
+                            if r_count < ROWS and cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
                             if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
                             if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
                         if has_s: s_count += 1
@@ -1030,7 +1029,7 @@ def main(page: ft.Page):
                 sub += score
             return sub
 
-        # ダイアログ盤面＋手入力値の再計算
+        # ダイアログ盤面＋手入力値の再計算（画面配置前の個別updateエラー対策）
         def recalculate_dialog_score():
             t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
             t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
@@ -1075,8 +1074,7 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                target_dialog.open = False 
-                page.update()
+                page.close(target_dialog) 
                 update_my_records_ui()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
@@ -1112,7 +1110,7 @@ def main(page: ft.Page):
                 height=450
             ),
             actions=[
-                ft.TextButton("キャンセル", on_click=lambda e: (setattr(target_dialog, "open", False), page.update())),
+                ft.TextButton("キャンセル", on_click=lambda e: page.close(target_dialog)),
                 ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
             ],
             actions_alignment=ft.MainAxisAlignment.END
@@ -1121,12 +1119,9 @@ def main(page: ft.Page):
         for field in list(agri_fields.values()) + list(card_fields.values()):
             field.on_change = lambda e: recalculate_dialog_score()
 
-        # ⭕【完全出力保証】デッドロック原因（インデントズレ）が消滅したため、ここで確実に描画をトリガー可能
-        page.dialog = target_dialog
-        target_dialog.open = True
-        page.update()
-
-
+        # ⭕【最重要・Flet公式の最前面出力命令】
+        # 画面のシリアライズ無視バグを起こさず、確実に1回でダイアログを展開します。
+        page.open(target_dialog)
 
 
     # =========================================================================
