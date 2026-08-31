@@ -403,7 +403,18 @@ def main(page: ft.Page):
             elif name == "家族の数": score = count * 3
             elif name == "乞食の枚数": score = count * -3
 
-            input_field = ft.TextField(value=str(count), width=50, height=30, text_size=12, content_padding=3, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_input_change(k, e.control.value))
+            def make_on_change(k=name): return lambda e: on_input_change(k, e.control.value)
+            def clear_card_on_focus(e):
+                e.control.value = ""
+                e.control.update()
+
+            input_field = ft.TextField(
+                value=str(score), width=60, height=35, text_size=14, content_padding=5,
+                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, 
+                on_change=make_on_change(),
+                on_focus=clear_card_on_focus  # ⭕ タップした瞬間に元の文字を消す
+            )
+
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
         count_table2.rows = rows
 
@@ -511,9 +522,16 @@ def main(page: ft.Page):
             elif name == "小さい進歩": text_color = ft.Colors.AMBER_500
             elif name == "大きい進歩": text_color = ft.Colors.RED_900
 
+            def make_on_change(k=name): return lambda e: on_input_change(k, e.control.value)
+            def clear_card_on_focus(e):
+                e.control.value = ""
+                e.control.update()
+
             input_field = ft.TextField(
-                value=str(score), width=50, height=30, text_size=12, content_padding=3,
-                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_input_change(k, e.control.value)
+                value=str(score), width=60, height=35, text_size=14, content_padding=5,
+                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, 
+                on_change=make_on_change(),
+                on_focus=clear_card_on_focus  # ⭕ タップした瞬間に元の文字を消す
             )
             detail_btn = ft.ElevatedButton(
                 text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
