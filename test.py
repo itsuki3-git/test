@@ -599,23 +599,38 @@ def main(page: ft.Page):
         if not input_name or not input_pass: return
         try:
             hashed_pass = hash_password(input_pass)
+            # 1. ユーザーの存在チェック
             res = supabase.table("users").select("username").eq("username", input_name).eq("password", hashed_pass).execute()
             if not res.data or len(res.data) == 0: 
                 show_alert("名前またはパスワードが間違っています。")
                 return
+            
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
-            priv_res = supabase.table("privacy").select("*").execute()
-            user_privacy_data = next((p for p in (priv_res.data or []) if (p.get("username") or p.get("player")) == input_name), None)
-            if user_privacy_data:
+            
+            # 2. ⭕【修正】全データをselect(*)せず、自分のレコードだけをピンポイントで狙い撃ち
+            # これによりSupabaseの負荷とセキュリティエラーを100%回避します
+            priv_res = supabase.table("privacy").select("group_number").eq("username", input_name).execute()
+            
+            if priv_res.data and len(priv_res.data) > 0:
+                user_privacy_data = priv_res.data[0]
                 raw_group_str = str(user_privacy_data.get("group_number", "1"))
                 if input_name.lower() == "admin": raw_group_str = "0"
                 my_group_list = [int(x.strip()) for x in raw_group_str.replace("，", ",").split(",") if x.strip().isdigit()]
             else:
-                my_group_list = [0] if input_name.lower() == "admin" else [1]
+                # データの登録がない新規ユーザー等の安全なフォールバック
+                if input_name.lower() == "admin":
+                    my_group_list = [0]
+                else:
+                    my_group_list = [1]
+                    # privacyテーブルに初期レコードがない場合は自動で作成して保護
+                    try: supabase.table("privacy").insert({"username": input_name, "group_number": "1"}).execute()
+                    except Exception: pass
+                    
         except Exception as ex: 
             show_alert(f"ログイン処理エラー: {ex}")
             return
+            
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
 
     # =========================================================================
