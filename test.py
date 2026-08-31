@@ -109,7 +109,7 @@ def main(page: ft.Page):
     handle_forgot_reset_password = lambda e: None
     open_change_group_dialog = lambda e: None
     handle_save_group_number = lambda e: None
-
+    check_auto_login = lambda: None
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
