@@ -100,16 +100,17 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡 【完全版】後半で定義するすべての関数を予約し、定義順エラーを100%防止します
-    handle_rename = lambda e: None
-    handle_change_password = lambda e: None
-    handle_save_secret_question = lambda e: None
-    execute_delete_account = lambda e: None
-    handle_forgot_check_user = lambda e: None
-    handle_forgot_reset_password = lambda e: None
-    open_change_group_dialog = lambda e: None
-    handle_save_group_number = lambda e: None
-    check_auto_login = lambda: None
+    # 💡 【第1分割】に以前記述した lambda 宣言を削除し、関数の名前だけをNoneで予約します
+    handle_rename = None
+    handle_change_password = None
+    handle_save_secret_question = None
+    execute_delete_account = None
+    handle_forgot_check_user = None
+    handle_forgot_reset_password = None
+    open_change_group_dialog = None
+    handle_save_group_number = None
+    check_auto_login = None
+
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -512,7 +513,7 @@ def main(page: ft.Page):
 
             input_field = ft.TextField(
                 value=str(score), width=50, height=30, text_size=12, content_padding=3,
-                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_card_input_change(k, e.control.value)
+                text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=lambda e, k=name: on_input_change(k, e.control.value)
             )
             detail_btn = ft.ElevatedButton(
                 text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
@@ -528,6 +529,7 @@ def main(page: ft.Page):
         update_data_table(ranch_c, unused_c, ranch_stable)
         update_data_table3()
         refresh_grand_total_labels()
+        page.update()
 
     def on_input_change(key, val):
         try: agri_inputs[key] = int(val) if val != "" else 0
@@ -536,6 +538,7 @@ def main(page: ft.Page):
         update_data_table(ranch_c, unused_c, ranch_stable)
         update_data_table2()
         refresh_grand_total_labels()
+        page.update()
 
     def update_mode_ui():
         ranch_c, unused_c, ranch_stable = analyze_grid()
@@ -600,6 +603,80 @@ def main(page: ft.Page):
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
     handle_rename = lambda e: None # 💡 エラー回避のための事前宣言。この行を第4分割の最末尾に追加してください
 
+    def _handle_new_register(e):
+        username = login_name_input.value.strip()
+        password = login_pass_input.value.strip()
+        if not username:
+            show_alert("プレイヤー名を入力してください。")
+            return
+        if len(password) < 4:
+            show_alert("パスワードは4桁以上で入力してください。")
+            return
+        try:
+            existing_user = supabase.table("users").select("username").eq("username", username).execute()
+            if existing_user.data and len(existing_user.data) > 0:
+                show_alert("このプレイヤー名は既に登録されています。")
+                return
+            hashed_pass = hash_password(password)
+            supabase.table("users").insert({"username": username, "password": hashed_pass}).execute()
+            supabase.table("privacy").insert({"username": username, "group_number": "1"}).execute()
+            page.overlay.append(ft.SnackBar(ft.Text(f"🎉 {username} さんの登録が完了しました！"), open=True))
+            handle_existing_login(None)
+        except Exception as ex:
+            show_alert(f"新規登録に失敗しました: {ex}")
+
+    def _handle_forgot_check_user(e):
+        target_user = forgot_name_input.value.strip()
+        if not target_user:
+            show_alert("プレイヤー名を入力してください。")
+            return
+        try:
+            res = supabase.table("privacy").select("*").execute()
+            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
+            if not user_priv or not user_priv.get("secret_question"):
+                forgot_question_text.value = "❌ 秘密の質問が登録されていないか、ユーザーが見つかりません"
+                forgot_question_text.color = ft.Colors.RED
+                page.update()
+                return
+            forgot_question_text.value = f"❓ 質問: {user_priv.get('secret_question')}"
+            forgot_question_text.color = ft.Colors.BLUE_600
+            page.update()
+        except Exception as ex:
+            show_alert(f"ユーザー確認エラー: {ex}")
+
+    def _handle_forgot_reset_password(e):
+        target_user = forgot_name_input.value.strip()
+        answer = forgot_answer_input.value.strip()
+        new_pass = forgot_new_pass_input.value.strip()
+        if not target_user or not answer or not new_pass:
+            show_alert("すべての項目を入力してください。")
+            return
+        if len(new_pass) < 4:
+            show_alert("新しいパスワードは4桁以上必要です。")
+            return
+        try:
+            res = supabase.table("privacy").select("*").execute()
+            user_priv = next((p for p in (res.data or []) if (p.get("username") or p.get("player")) == target_user), None)
+            if not user_priv or not user_priv.get("secret_answer"):
+                show_alert("再設定手続きを行えません。")
+                return
+            if hash_password(answer) != user_priv.get("secret_answer"):
+                show_alert("秘密の質問の答えが間違っています。")
+                return
+            hashed_new_pass = hash_password(new_pass)
+            supabase.table("users").update({"password": hashed_new_pass}).eq("username", target_user).execute()
+            page.close(forgot_dialog)
+            login_name_input.value = target_user
+            login_pass_input.value = new_pass
+            page.overlay.append(ft.SnackBar(ft.Text("🎉 パスワードを再設定しました。ログインしてください。"), open=True))
+            page.update()
+        except Exception as ex:
+            show_alert(f"パスワード再設定失敗: {ex}")
+
+    # UIから呼び出せるようにグローバル変数にバインド（事前宣言への代入）
+    handle_new_register = _handle_new_register
+    handle_forgot_check_user = _handle_forgot_check_user
+    handle_forgot_reset_password = _handle_forgot_reset_password
 
     def enter_game_session(username, success_message):
         nonlocal current_player
