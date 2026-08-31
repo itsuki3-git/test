@@ -587,6 +587,8 @@ def main(page: ft.Page):
             show_alert(f"ログイン処理エラー: {ex}")
             return
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
+    handle_rename = lambda e: None # 💡 エラー回避のための事前宣言。この行を第4分割の最末尾に追加してください
+
 
     def enter_game_session(username, success_message):
         nonlocal current_player
