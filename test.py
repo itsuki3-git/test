@@ -295,15 +295,15 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ スコアカードを押したときにボードへ完全復元する関数を紐付け
-                def make_load_click(rec=record):
-                    return lambda e: load_saved_game_to_board(rec)
+                # ⭕ カードをタップしたときに詳細・修正ダイアログを開く関数
+                def make_open_detail_click(rec=record):
+                    return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
                 card_content = ft.GestureDetector(
-                    on_tap=make_load_click(), # ⭕ タップでボードへの復元ロードを実行
+                    on_tap=make_open_detail_click(), # ⭕ タップで詳細ダイアログを開く
                     content=ft.Container(
                         padding=12,
                         content=ft.Row(controls=[
@@ -318,124 +318,7 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
 
-    # ⭕ 拡張：新規保存だけでなく、過去のデータの「上書き修正保存」にも対応
-    def save_current_game(e):
-        nonlocal editing_record_id
-        if not current_player: return
-        total_score = get_grand_total()
-        memo_text = game_memo_input.value.strip() if game_memo_input.value else ""
-
-        # 🚜 【超重要】現在の盤面の色、柵、手入力値をすべて1つのパックにシリアライズ
-        board_pack = {
-            "cells": [cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
-            "horiz": [horiz_line_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
-            "vert": [vert_line_dict[(c, r)].bgcolor for c in range(COLS + 1) for r in range(ROWS)],
-            "agri_inputs": agri_inputs,
-            "card_inputs": card_inputs,
-            "card_details": card_details
-        }
-        board_json_str = json.dumps(board_pack)
-
-        try:
-            if editing_record_id is not None:
-                # 過去ログの修正モード時は、既存のレコードをUPDATE(上書き)
-                supabase.table("records").update({
-                    "final_score": total_score,
-                    "memo": memo_text,
-                    "game_data": board_json_str # ⚠️ Supabaseに game_data カラム(text型)を追加してください
-                }).eq("id", editing_record_id).execute()
-                msg = "📝 過去のゲーム記録を上書き修正しました！"
-            else:
-                # 通常時は新規INSERT
-                supabase.table("records").insert({
-                    "player": current_player, 
-                    "final_score": total_score, 
-                    "date": get_jst_now_str(),
-                    "memo": memo_text,
-                    "game_data": board_json_str
-                }).execute()
-                msg = f"🎉 {current_player} の新しい記録を保存しました！"
-        except Exception as ex:
-            show_alert(f"記録の保存/修正に失敗しました: {ex}\n※Supabaseにgame_dataカラムがあるか確認してください")
-            return
-        
-        # 保存完了後はボードをリセットして通常モードに戻る
-        reset_current_game()
-        update_all_uis()
-        page.overlay.append(ft.SnackBar(ft.Text(msg), open=True))
-        page.update()
-
-        # ⭕ 新設：過去のゲームデータを解析して、現在の計算ボードに一瞬で100%復元するシステム
-    def load_saved_game_to_board(record):
-        nonlocal editing_record_id
-        # 1. 修正対象のレコードIDを記憶
-        editing_record_id = record["id"]
-        
-        # 2. メモ欄と日付表示を当時のデータにセット
-        game_memo_input.value = record.get("memo", "")
-        current_date_text.value = f"📅 【過去ログ修正モード】 元の対戦日時: {record.get('date')}"
-        
-        # 3. game_dataカラムからグラフィックや入力値一式を復元
-        raw_game_data = record.get("game_data", "")
-        if raw_game_data:
-            try:
-                board_pack = json.loads(raw_game_data)
-                
-                # マス目の色を復元
-                cell_colors = board_pack.get("cells", [])
-                idx = 0
-                for r in range(ROWS):
-                    for c in range(COLS):
-                        if idx < len(cell_colors):
-                            cell_dict[(r, c)].bgcolor = cell_colors[idx]
-                        idx += 1
-
-                # 横の柵を復元
-                horiz_colors = board_pack.get("horiz", [])
-                idx = 0
-                for r in range(ROWS + 1):
-                    for c in range(COLS):
-                        if idx < len(horiz_colors):
-                            horiz_line_dict[(r, c)].bgcolor = horiz_colors[idx]
-                        idx += 1
-
-                # 縦の柵を復元
-                vert_colors = board_pack.get("vert", [])
-                idx = 0
-                for c in range(COLS + 1):
-                    for r in range(ROWS):
-                        if idx < len(vert_colors):
-                            vert_line_dict[(c, r)].bgcolor = vert_colors[idx]
-                        idx += 1
-
-                # 手入力の数値を辞書に復元
-                nonlocal agri_inputs, card_inputs, card_details
-                agri_inputs.update(board_pack.get("agri_inputs", {}))
-                card_inputs.update(board_pack.get("card_inputs", {}))
-                card_details.update(board_pack.get("card_details", {}))
-
-            except Exception:
-                show_alert("この記録には詳細な盤面データが含まれていないか、古い形式のデータです。")
-        
-        # 4. 各種データテーブルと点数表示を再計算・リフレッシュ
-        update_data_table2()
-        update_data_table3()
-        ranch_c, unused_c, ranch_stable = analyze_grid()
-        update_data_table(ranch_c, unused_c, ranch_stable)
-        refresh_grand_total_labels()
-        
-        # 5. 保存ボタンのテキストを「上書き保存」を想起させる文言に変えるため、通知を出してタブを自動移動
-        main_tab_view.selected_index = 0 # ⭕ 自動的に「得点計算ボード」タブへ画面を切り替え！
-        page.overlay.append(ft.SnackBar(ft.Text("🚜 過去の盤面と資源数を計算ボードに復元しました。修正が可能です！"), open=True))
-        page.update()
-
-    # ⭕ リセット関数が呼ばれたら、過去ログ修正モード(ID記憶)も安全に解除する
-    def _original_reset_current_game():
-        global editing_record_id
-        editing_record_id = None
-
-
-    # ⭕ 新設：選択されたスコアの詳細確認とメモを直接アップデートするダイアログシステム
+    # ⭕ マイページ内で完結する、メモの確認・上書き修正専用のダイアログシステム
     def show_record_detail_dialog(record):
         detail_memo_input = ft.TextField(
             label="対戦メモの編集",
@@ -450,11 +333,11 @@ def main(page: ft.Page):
         def save_edited_memo(e):
             try:
                 new_memo_text = detail_memo_input.value.strip()
-                # Supabaseの当該レコード(id)のmemoカラムを上書き更新
+                # ⭕ 得点計算ボードに影響を与えず、このスコアの「memo」だけをSupabaseへ直接上書き(UPDATE)
                 supabase.table("records").update({"memo": new_memo_text}).eq("id", record["id"]).execute()
                 page.close(page.dialog)
-                update_my_records_ui() # 履歴一覧を再描画
-                page.overlay.append(ft.SnackBar(ft.Text("📝 メモの内容を更新しました！"), open=True))
+                update_my_records_ui() # マイページの一覧を最新状態に再描画
+                page.overlay.append(ft.SnackBar(ft.Text("📝 メモの内容をマイページで更新しました！"), open=True))
                 page.update()
             except Exception as ex:
                 show_alert(f"メモの更新に失敗しました: {ex}")
@@ -478,6 +361,32 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         page.open(page.dialog)
+
+
+    def save_current_game(e):
+        if not current_player: return
+        total_score = get_grand_total()
+        memo_text = game_memo_input.value.strip() if game_memo_input.value else ""
+        
+        try:
+            # 常に新規INSERTのみを行う通常仕様
+            supabase.table("records").insert({
+                "player": current_player, 
+                "final_score": total_score, 
+                "date": get_jst_now_str(),
+                "memo": memo_text
+            }).execute()
+        except Exception as ex:
+            show_alert(f"記録保存失敗: {ex}")
+            return
+        
+        reset_current_game()
+        game_memo_input.value = ""
+        current_date_text.value = f"📅 对戦日時: {get_jst_now_str()}"
+        
+        update_all_uis()
+        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
+        page.update()
 
     def delete_saved_record(target_id):
         try:
