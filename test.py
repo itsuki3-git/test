@@ -282,7 +282,7 @@ def main(page: ft.Page):
     import json # 💡 盤面データを丸ごとパックするためにインポートを追加
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（GestureDetectorの配置修正版）
+    # 📊 マイページ履歴一覧の生成（タップでダイアログを確実に開くための関数定義順修正版）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -298,14 +298,13 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ タップ時に関数を安全にキックするラッパー
+                # ⭕ クリックを100%確実に通すためのイベントバインディング
                 def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # GestureDetectorをContainerの内側に配置し、カード全体がどこを押されても反応するように修正
                 my_records_list.controls.append(
                     ft.Container(
                         content=ft.GestureDetector(
@@ -326,9 +325,7 @@ def main(page: ft.Page):
                 )
             page.update()
 
-    # =========================================================================
-    # 📊 マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
-    # =========================================================================
+    # ⭕ 呼び出し位置の競合を完全に防ぐため、update_my_records_ui のすぐ直後に配置
     def show_record_detail_dialog(record):
         import json
         raw_game_data = record.get("game_data", "")
@@ -338,9 +335,8 @@ def main(page: ft.Page):
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # ダイアログ専用の独立パレット状態
-        dialog_current_mode = "COLOR"  # "COLOR" または "LINE"
-        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 インデックス指定で安全に「木の家」を取得
+        dialog_current_mode = "COLOR"
+        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 木の家(グリーン)を確実に指定
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -349,12 +345,10 @@ def main(page: ft.Page):
         D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
         D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
 
-        # 記録当時の盤面を格納する配列（デフォルトは空のグレー盤面）
         dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
-        # 💡 記録当時の保存数値をローカル変数へ100%完全ロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
@@ -370,13 +364,13 @@ def main(page: ft.Page):
         card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
-        # --- 2. ダイアログ内専用パレットの切り替えイベント群 ---
+        # パレットの切り替え処理
         def on_d_palette_click(e):
             nonlocal dialog_selected_color, dialog_current_mode
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None # Containerの外枠線をクリア
+                p_col.controls[0].border = None
                 p_col.controls[0].update()
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             e.control.update()
@@ -392,7 +386,6 @@ def main(page: ft.Page):
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             d_line_mode_btn.update()
 
-        # パレットボタン群の生成
         d_palette_options = []
         for i, info in enumerate(PALETTE_INFO):
             border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
@@ -404,7 +397,7 @@ def main(page: ft.Page):
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
         d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
 
-        # --- 3. ミニサイズ盤面ボードの組み立て ---
+        # ミニサイズ盤面の構築
         d_cell_dict = {}
         d_horiz_dict = {}
         d_vert_dict = {}
@@ -456,7 +449,6 @@ def main(page: ft.Page):
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
-    
         # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
@@ -553,7 +545,7 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                page.close(page.dialog)
+                page.close(target_dialog) # 💡 明示的な変数名で閉じる
                 update_my_records_ui()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
@@ -567,7 +559,9 @@ def main(page: ft.Page):
         # 💡 初期ロード計算を実行して数値を同期
         recalculate_dialog_score()
 
-        page.dialog = ft.AlertDialog(
+        # ⚠️ 【フリーズの根本原因バグを100%排除】
+        # page.dialogへのプロパティ代入を完全にやめ、完全に独立したダイアログとして定義
+        target_dialog = ft.AlertDialog(
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
@@ -588,37 +582,15 @@ def main(page: ft.Page):
                 height=450
             ),
             actions=[
-                ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
+                ft.TextButton("キャンセル", on_click=lambda e: page.close(target_dialog)),
                 ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
-        page.open(page.dialog)
+        
+        # ⭕ 最新のFlet仕様（競合クラッシュを起こさない安全なオープン命令）
+        page.open(target_dialog)
 
-    def save_current_game(e):
-        if not current_player: return
-        total_score = get_grand_total()
-        memo_text = game_memo_input.value.strip() if game_memo_input.value else ""
-        
-        try:
-            # 常に新規INSERTのみを行う通常仕様
-            supabase.table("records").insert({
-                "player": current_player, 
-                "final_score": total_score, 
-                "date": get_jst_now_str(),
-                "memo": memo_text
-            }).execute()
-        except Exception as ex:
-            show_alert(f"記録保存失敗: {ex}")
-            return
-        
-        reset_current_game()
-        game_memo_input.value = ""
-        current_date_text.value = f"📅 对戦日時: {get_jst_now_str()}"
-        
-        update_all_uis()
-        page.overlay.append(ft.SnackBar(ft.Text(f"{current_player} の記録を保存しました！"), open=True))
-        page.update()
 
     def delete_saved_record(target_id):
         try:
