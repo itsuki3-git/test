@@ -1508,10 +1508,18 @@ def main(page: ft.Page):
         ], expand=True, spacing=10
     )
 
+    # =========================================================================
+    # 📊 マイページ側の履歴レイアウト（タップ判定を遮断していたContainerを排除！）
+    # =========================================================================
     mypage_tab_view = ft.Column(
         controls=[
-            ft.Container(content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), padding=ft.padding.only(left=10, top=10, bottom=5)), 
-            ft.Container(content=my_records_list, expand=True), 
+            ft.Container(
+                content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), 
+                padding=ft.padding.only(left=10, top=10, bottom=5)
+            ), 
+            # ⭕【修正】不具合の原因だった ft.Container をなくし、my_records_listをダイレクトに配置！
+            # これにより、スマートフォンやブラウザからのカードタップが100%確実に検知されます。
+            my_records_list, 
             ft.Container(
                 content=ft.Column([
                     ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), 
@@ -1528,6 +1536,7 @@ def main(page: ft.Page):
         ], 
         expand=True
     )
+
     
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Row([ft.Container(content=ranking_title_text, expand=True), ranking_group_dropdown], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10), ft.Container(content=ranking_list, height=430)])
 
