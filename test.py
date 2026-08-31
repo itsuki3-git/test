@@ -514,15 +514,20 @@ def main(page: ft.Page):
         page.open(page.dialog)
         refresh_dialog_ui()
 
+    # 3つ目の表（カードボーナス）を計算・更新する関数
     def update_data_table3():
         rows = []
+        sub_total = 0
+
         for name, score in card_inputs.items():
-            text_color = ft.Colors.BLACK
             if name == "職業": text_color = ft.Colors.CYAN_800
-            elif name == "小さい進歩": text_color = ft.Colors.AMBER_500
+            elif name == "小さい進歩": text_color = ft.Colors.TEAL_700
             elif name == "大きい進歩": text_color = ft.Colors.RED_900
 
-            def make_on_change(k=name): return lambda e: on_input_change(k, e.control.value)
+            sub_total += score
+
+            def make_on_change(k=name): return lambda e: on_card_input_change(k, e.control.value)
+            
             def clear_card_on_focus(e):
                 e.control.value = ""
                 e.control.update()
@@ -531,32 +536,51 @@ def main(page: ft.Page):
                 value=str(score), width=60, height=35, text_size=14, content_padding=5,
                 text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, 
                 on_change=make_on_change(),
-                on_focus=clear_card_on_focus  # ⭕ タップした瞬間に元の文字を消す
+                on_focus=clear_card_on_focus
             )
-            detail_btn = ft.ElevatedButton(
-                text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
-                on_click=lambda e, k=name: show_card_dialog(k)
+
+            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=16, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
+
+        rows.append(
+            ft.DataRow(
+                color=ft.Colors.GREY_100,
+                cells=[
+                    ft.DataCell(ft.Text("合計点", size=18, weight="bold", color=ft.Colors.BLACK)),
+                    ft.DataCell(ft.Text(f"{sub_total} 点", size=18, weight="bold", color=ft.Colors.RED_700 if sub_total < 0 else ft.Colors.GREEN_700)),
+                    ft.DataCell(ft.Text("", size=16)),
+                ]
             )
-            rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
+        )
         count_table3.rows = rows
 
+    # ⭕【修正】入力中のTextFieldを勝手にリフレッシュして個数を書き換えるバグを防止
     def on_card_input_change(key, val):
         try: card_inputs[key] = int(val) if val != "" else 0
         except ValueError: card_inputs[key] = 0
+        
+        # 内部の計算データだけを最新に更新
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
-        update_data_table3()
+        
+        # 入力中の表3自体を丸ごと再描画するのをやめ、点数ラベルとコンテナの更新だけに留めます
+        table_container.update()
         refresh_grand_total_labels()
-        page.update()
+        top_info_container.update()
+        bottom_grand_total_container.update()
 
+    # ⭕【修正】2つ目の表も同様に、入力中のTextFieldを勝手に書き換えないように修正
     def on_input_change(key, val):
         try: agri_inputs[key] = int(val) if val != "" else 0
         except ValueError: agri_inputs[key] = 0
+        
         ranch_c, unused_c, ranch_stable = analyze_grid()
         update_data_table(ranch_c, unused_c, ranch_stable)
-        update_data_table2()
+        
+        # 入力欄の文字が勝手に変わるのを防ぐため、update_data_table2() の一斉上書きをスキップします
+        table_container.update()
         refresh_grand_total_labels()
-        page.update()
+        top_info_container.update()
+        bottom_grand_total_container.update()
 
     def update_mode_ui():
         ranch_c, unused_c, ranch_stable = analyze_grid()
