@@ -340,7 +340,7 @@ def main(page: ft.Page):
         
         # ダイアログ専用の独立パレット状態
         dialog_current_mode = "COLOR"  # "COLOR" または "LINE"
-        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 リストの0番目（木の家）を正しく指定
+        dialog_selected_color = PALETTE_INFO[0]["color"] # 💡 インデックス指定で安全に「木の家」を取得
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -376,28 +376,30 @@ def main(page: ft.Page):
             dialog_current_mode = "COLOR"
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
-                p_col.controls[0].border = None # 💡 Containerの外枠をリセット
+                p_col.controls[0].border = None # Containerの外枠線をクリア
+                p_col.controls[0].update()
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
+            e.control.update()
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
-            page.update()
+            d_line_mode_btn.update()
 
         def on_d_line_mode_click(e):
             nonlocal dialog_current_mode
             dialog_current_mode = "LINE"
             for p_col in d_palette_options: 
                 p_col.controls[0].border = None
+                p_col.controls[0].update()
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
-            page.update()
+            d_line_mode_btn.update()
 
         # パレットボタン群の生成
         d_palette_options = []
-        for info in PALETTE_INFO:
-            btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], on_click=on_d_palette_click)
+        for i, info in enumerate(PALETTE_INFO):
+            # 💡 初期値（木の家）だけに黒枠をつけて作成
+            border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
+            btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], border=border_style, on_click=on_d_palette_click)
             lbl = ft.Text(info["name"][:1], size=7, weight="bold")
             d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
-        
-        # 最初の木の家に選択枠線をつけておく
-        d_palette_options[0].border = ft.border.all(2, ft.Colors.BLACK)
         
         d_palette_row = ft.Row(controls=d_palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=6)
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
@@ -570,7 +572,7 @@ def main(page: ft.Page):
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 对戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
                     ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
