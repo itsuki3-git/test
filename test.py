@@ -1025,7 +1025,7 @@ def main(page: ft.Page):
                     d_stack.controls.append(hit_box)
                     d_vert_dict[(c, r)] = v_line
 
-                # ダイアログ専用スコア計算アルゴリズム本体
+            # ダイアログ専用スコア計算アルゴリズム本体
             def analyze_d_grid():
                 visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
                 queue = []
@@ -1058,7 +1058,8 @@ def main(page: ft.Page):
                                 if d_cell_dict[(cr, cc)].bgcolor == ft.Colors.LIGHT_BLUE_300: has_s = True
                                 if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
                                 if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
-                                if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 battling and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
+                                # ⭕【修正】構文エラーの原因だった「battling」を完全に消去しました
+                                if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
                                 if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
                             if has_s: s_count += 1
                 return r_count, u_count, s_count
@@ -1155,7 +1156,6 @@ def main(page: ft.Page):
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
-
 
 
     # =========================================================================
