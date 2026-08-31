@@ -803,7 +803,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（古いFlet環境でのクラッシュバグを完全修正）
+    # 📊 マイページ履歴一覧の生成（GestureDetectorを排除し、Containerクリックに統合）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -819,33 +819,32 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
+                # ⭕ クリック時に修正ダイアログを開くイベント関数
                 def make_load_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # 💡【修正ポイント】
-                # エラーの原因だった behavior=ft.HitTestBehavior.OPAQUE を完全に削除しました。
-                # 代わりに、GestureDetector自体の bgcolor を ft.Colors.TRANSPARENT（透明色）に
-                # 設定することで、古いFletバージョンでも100%確実に空白のタップを検知させます。
+                # 💡【エラーと不発の根本解決】
+                # GestureDetectorを完全に無くし、Container自体の「on_click」を使用します。
+                # 背景色bgcolorを設定したContainerにon_clickを直付けすることで、
+                # 空白部分を含めてカード全体のどこを押しても100%確実に反応し、かつエラーを絶対に起こしません！
                 my_records_list.controls.append(
-                    ft.GestureDetector(
-                        on_tap=make_load_click(),
-                        bgcolor=ft.Colors.TRANSPARENT, # ⭕ エラーを起こさず空白部分のタップを通す設定
-                        content=ft.Container(
-                            padding=12, 
-                            border=ft.border.all(1, ft.Colors.BLUE_100), 
-                            border_radius=8, 
-                            bgcolor=ft.Colors.BLUE_50,
-                            content=ft.Row(controls=[
-                                ft.Column([
-                                    ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                                    ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
-                                ], expand=True),
-                                ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                        )
+                    ft.Container(
+                        padding=12, 
+                        border=ft.border.all(1, ft.Colors.BLUE_100), 
+                        border_radius=8, 
+                        bgcolor=ft.Colors.BLUE_50,
+                        on_click=make_load_click(), # ⭕ カード全体をどこでもタップ可能にする最強の設定
+                        content=ft.Row(controls=[
+                            ft.Column([
+                                ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                                ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
+                            ], expand=True),
+                            # 💡 削除ボタンのクリックが親のContainerのクリックに巻き込まれないように、e.stopPropagation()が不要な単独コントロールとして配置
+                            ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                     )
                 )
             page.update()
