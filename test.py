@@ -100,16 +100,16 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡 【第1分割】に以前記述した lambda 宣言を削除し、関数の名前だけをNoneで予約します
-    handle_rename = None
-    handle_change_password = None
-    handle_save_secret_question = None
-    execute_delete_account = None
-    handle_forgot_check_user = None
-    handle_forgot_reset_password = None
-    open_change_group_dialog = None
-    handle_save_group_number = None
-    check_auto_login = None
+    # 💡 【完全版・事前宣言】UI組み立て時の定義順エラーを完全に防止する安全なラッパー
+    handle_new_register = lambda e: _handle_new_register(e) if '_handle_new_register' in locals() or '_handle_new_register' in globals() else None
+    handle_change_password = lambda e: _handle_change_password(e) if '_handle_change_password' in locals() or '_handle_change_password' in globals() else None
+    handle_save_secret_question = lambda e: _handle_save_secret_question(e) if '_handle_save_secret_question' in locals() or '_handle_save_secret_question' in globals() else None
+    execute_delete_account = lambda: _execute_delete_account() if '_execute_delete_account' in locals() or '_execute_delete_account' in globals() else None
+    handle_forgot_check_user = lambda e: _handle_forgot_check_user(e) if '_handle_forgot_check_user' in locals() or '_handle_forgot_check_user' in globals() else None
+    handle_forgot_reset_password = lambda e: _handle_forgot_reset_password(e) if '_handle_forgot_reset_password' in locals() or '_handle_forgot_reset_password' in globals() else None
+    open_change_group_dialog = lambda e: _open_change_group_dialog(e) if '_open_change_group_dialog' in locals() or '_open_change_group_dialog' in globals() else None
+    handle_save_group_number = lambda e: _handle_save_group_number(e) if '_handle_save_group_number' in locals() or '_handle_save_group_number' in globals() else None
+    check_auto_login = lambda: _check_auto_login() if '_check_auto_login' in locals() or '_check_auto_login' in globals() else None
 
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
@@ -603,6 +603,9 @@ def main(page: ft.Page):
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
     handle_rename = lambda e: None # 💡 エラー回避のための事前宣言。この行を第4分割の最末尾に追加してください
 
+    # =========================================================================
+    # 🔒 認証系（新規登録・質問確認・パスワード再設定）の関数本体
+    # =========================================================================
     def _handle_new_register(e):
         username = login_name_input.value.strip()
         password = login_pass_input.value.strip()
@@ -672,6 +675,7 @@ def main(page: ft.Page):
             page.update()
         except Exception as ex:
             show_alert(f"パスワード再設定失敗: {ex}")
+
 
     # UIから呼び出せるようにグローバル変数にバインド（事前宣言への代入）
     handle_new_register = _handle_new_register
