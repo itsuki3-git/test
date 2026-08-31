@@ -1522,17 +1522,9 @@ def main(page: ft.Page):
         ], expand=True, spacing=10
     )
 
-    # =========================================================================
-    # 📊 マイページ側の履歴レイアウト（タップ判定を遮断していたContainerを排除！）
-    # =========================================================================
     mypage_tab_view = ft.Column(
         controls=[
-            ft.Container(
-                content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), 
-                padding=ft.padding.only(left=10, top=10, bottom=5)
-            ), 
-            # ⭕【修正】不具合の原因だった ft.Container をなくし、my_records_listをダイレクトに配置！
-            # これにより、スマートフォンやブラウザからのカードタップが100%確実に検知されます。
+            ft.Container(content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), padding=ft.padding.only(left=10, top=10, bottom=5)), 
             my_records_list, 
             ft.Container(
                 content=ft.Column([
@@ -1550,7 +1542,6 @@ def main(page: ft.Page):
         ], 
         expand=True
     )
-
     
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Row([ft.Container(content=ranking_title_text, expand=True), ranking_group_dropdown], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10), ft.Container(content=ranking_list, height=430)])
 
@@ -1561,7 +1552,8 @@ def main(page: ft.Page):
     page.controls.clear()
     page.add(login_view, authenticated_view)
 
-    # ⭕ 【安全な枠線適用】通常のリストに対して直接 border プロパティにアクセスしていた不具合を安全に回避
+    # ⭕【完全修正】リスト型変数に直接.borderを指定してクラッシュしていた記述を排除し、
+    # 各コンテナ要素に対してループで安全に境界線を設定するように修正
     if len(palette_options) > 0:
         for option in palette_options:
             if hasattr(option, 'border'):
@@ -1576,4 +1568,3 @@ def main(page: ft.Page):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
-
