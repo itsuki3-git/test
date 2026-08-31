@@ -318,189 +318,245 @@ def main(page: ft.Page):
                 my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
 
-    # ⭕ マイページ内で「得点（盤面、資源、カード）」と「メモ」をすべて直接修正・自動再計算できるダイアログ
+    # ⭕ マイページ内で「3×5の牧場ボード・柵」「資源」「カード」「メモ」をすべて完全再現して直接修正できるダイアログ
     def show_record_detail_dialog(record):
-        # 過去のゲームデータをJSONからデコード（ない場合は現在の設定から空の枠を作る）
         import json
         raw_game_data = record.get("game_data", "")
         
-        # ダイアログ専用のローカル入力用変数を作成（元のボードの状態を壊さないため）
+        # 1. ダイアログ専用のローカル管理データと入力コンポーネントの初期化
         local_agri = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # 過去の盤面スコアや手入力データが存在すれば展開
-        saved_cells_pack = None
+        # ダイアログ盤面用のサイズ定数（スマホ画面に収まるように縮小）
+        D_CELL_W, D_CELL_H = 40, 40
+        D_LINE_THICK = 3
+        D_HIT_BOX_EXT = 8
+        D_OFFSET = D_HIT_BOX_EXT
+        D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
+        D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
+
+        # 状態保持用リスト
+        dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
+        dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
+        dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
+
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
                 local_agri.update(board_pack.get("agri_inputs", {}))
                 local_card.update(board_pack.get("card_inputs", {}))
-                saved_cells_pack = board_pack # 盤面のグラフィックデータ（色、柵）を保持
+                
+                # 過去のグラフィックデータをローカル配列に展開
+                if "cells" in board_pack and board_pack["cells"]:
+                    dialog_cell_bgcolors = board_pack["cells"]
+                if "horiz" in board_pack and board_pack["horiz"]:
+                    dialog_horiz_bgcolors = board_pack["horiz"]
+                if "vert" in board_pack and board_pack["vert"]:
+                    dialog_vert_bgcolors = board_pack["vert"]
             except Exception:
                 pass
 
-        # --- 1. UI入力コンポーネントの作成 ---
-        detail_memo_input = ft.TextField(
-            label="対戦メモ", value=local_memo,
-            multiline=True, min_lines=1, max_lines=3, text_size=13, content_padding=8
-        )
+        # メモ・資源・カードの入力フィールド
+        detail_memo_input = ft.TextField(label="対戦メモ", value=local_memo, multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
+        agri_fields = {name: ft.TextField(value=str(val), label=name, width=75, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_agri.items()}
+        card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
+        total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
+
+        # --- 2. ダイアログ盤面（ミニサイズ）のUI組み立て ---
+        d_cell_dict = {}
+        d_horiz_dict = {}
+        d_vert_dict = {}
         
-        # 資源・家族の入力欄
-        agri_fields = {}
-        for name, current_val in local_agri.items():
-            agri_fields[name] = ft.TextField(
-                value=str(current_val), label=name, width=85, height=40,
-                text_size=12, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER
-            )
-            
-        # カードボーナスの入力欄
-        card_fields = {}
-        for name, current_val in local_card.items():
-            card_fields[name] = ft.TextField(
-                value=str(current_val), label=name, width=95, height=40,
-                text_size=12, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER
-            )
+        # マス目・柵をタップしたときのパレットモード連動
+        def on_d_cell_click(e):
+            if current_mode == "COLOR":
+                e.control.bgcolor = ft.Colors.GREY_100 if e.control.bgcolor == selected_color else selected_color
+                recalculate_dialog_score()
 
-        # 表示用の点数ラベル
-        total_score_preview = ft.Text(
-            value=f"合計得点: {record.get('final_score')} 点", 
-            size=18, weight="bold", color=ft.Colors.BLUE_700
-        )
+        def toggle_d_line(e):
+            if current_mode == "LINE":
+                line_node = e.control.content
+                line_node.bgcolor = ft.Colors.GREY_300 if line_node.bgcolor == ft.Colors.BROWN_700 else ft.Colors.BROWN_700
+                recalculate_dialog_score()
 
-        # --- 2. ダイアログ内での再計算ロジック ---
-        def get_local_agri_subtotal(inputs):
+        d_stack = ft.Stack(width=D_TOTAL_W, height=D_TOTAL_H)
+        
+        # マス目の配置
+        idx = 0
+        for r in range(ROWS):
+            for c in range(COLS):
+                cell_bg = dialog_cell_bgcolors[idx] if idx < len(dialog_cell_bgcolors) else ft.Colors.GREY_100
+                cell = ft.Container(
+                    content=ft.Text(f"{r * COLS + c + 1}", color=ft.Colors.GREY_400, size=9),
+                    alignment=ft.alignment.center, bgcolor=cell_bg, width=D_CELL_W, height=D_CELL_H,
+                    left=c * D_CELL_W + D_OFFSET, top=r * D_CELL_H + D_OFFSET, on_click=on_d_cell_click
+                )
+                d_stack.controls.append(cell)
+                d_cell_dict[(r, c)] = cell
+                idx += 1
+
+        # 横の柵
+        idx = 0
+        for r in range(ROWS + 1):
+            for c in range(COLS):
+                line_bg = dialog_horiz_bgcolors[idx] if idx < len(dialog_horiz_bgcolors) else ft.Colors.GREY_300
+                left_pos = c * D_CELL_W + D_OFFSET
+                top_pos = r * D_CELL_H - (D_LINE_THICK / 2) + D_OFFSET
+                if r == 0: top_pos = D_OFFSET
+                if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
+                
+                h_line = ft.Container(width=D_CELL_W, height=D_LINE_THICK, bgcolor=line_bg)
+                hit_box = ft.Container(content=h_line, width=D_CELL_W, height=D_LINE_THICK + (D_HIT_BOX_EXT * 2), bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos, top=top_pos - D_HIT_BOX_EXT, on_click=toggle_d_line)
+                d_stack.controls.append(hit_box)
+                d_horiz_dict[(r, c)] = h_line
+                idx += 1
+
+        # 縦の柵
+        idx = 0
+        for c in range(COLS + 1):
+            for r in range(ROWS):
+                line_bg = dialog_vert_bgcolors[idx] if idx < len(dialog_vert_bgcolors) else ft.Colors.GREY_300
+                left_pos = c * D_CELL_W - (D_LINE_THICK / 2) + D_OFFSET
+                top_pos = r * D_CELL_H + D_OFFSET
+                if c == 0: left_pos = D_OFFSET
+                if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
+                
+                v_line = ft.Container(width=D_LINE_THICK, height=D_CELL_H, bgcolor=line_bg)
+                hit_box = ft.Container(content=v_line, width=D_LINE_THICK + (D_HIT_BOX_EXT * 2), height=D_CELL_H, bgcolor=ft.Colors.TRANSPARENT, alignment=ft.alignment.center, left=left_pos - D_HIT_BOX_EXT, top=top_pos, on_click=toggle_d_line)
+                d_stack.controls.append(hit_box)
+                d_vert_dict[(c, r)] = v_line
+                idx += 1
+        # --- 3. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        def analyze_d_grid():
+            visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
+            queue = []
+            for r in range(-1, ROWS + 1):
+                for c in range(-1, COLS + 1):
+                    if r == -1 or r == ROWS or c == -1 or c == COLS:
+                        visited[(r, c)] = True
+                        queue.append((r, c))
+            while queue:
+                curr_r, curr_c = queue.pop(0)
+                if curr_r > -1 and curr_r < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
+                    if d_horiz_dict[(curr_r, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r - 1, curr_c)]: visited[(curr_r - 1, curr_c)] = True; queue.append((curr_r - 1, curr_c))
+                if curr_r < ROWS and curr_r + 1 < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
+                    if d_horiz_dict[(curr_r + 1, curr_c)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r + 1, curr_c)]: visited[(curr_r + 1, curr_c)] = True; queue.append((curr_r + 1, curr_c))
+                if curr_c > -1 and curr_c < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
+                    if d_vert_dict[(curr_c, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r, curr_c - 1)]: visited[(curr_r, curr_c - 1)] = True; queue.append((curr_r, curr_c - 1))
+                if curr_c < COLS and curr_c + 1 < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
+                    if d_vert_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
+                        if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, curr_c + 1))
+            u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and d_cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100)
+            r_count, s_count = 0, 0
+            for r in range(ROWS):
+                for c in range(COLS):
+                    if not visited[(r, c)]:
+                        r_count += 1; i_q = [(r, c)]; visited[(r, c)] = True; has_s = False
+                        while i_q:
+                            cr, cc = i_q.pop(0)
+                            if d_cell_dict[(cr, cc)].bgcolor == ft.Colors.LIGHT_BLUE_300: has_s = True
+                            if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
+                            if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
+                            if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
+                            if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
+                        if has_s: s_count += 1
+            return r_count, u_count, s_count
+
+        def get_local_agri_score(inputs):
             sub = 0
             for name, count in inputs.items():
                 score = -1
-                if name == "小麦":
-                    if count == 0: score = -1
-                    elif count <= 3: score = 1
-                    elif count <= 5: score = 2
-                    elif count <= 7: score = 3
-                    else: score = 4
-                elif name == "野菜":
-                    if count == 0: score = -1
-                    elif count == 1: score = 1
-                    elif count == 2: score = 2
-                    elif count == 3: score = 3
-                    else: score = 4
-                elif name == "羊":
-                    if count == 0: score = -1
-                    elif count <= 3: score = 1
-                    elif count <= 5: score = 2
-                    elif count <= 7: score = 3
-                    else: score = 4
-                elif name == "猪":
-                    if count == 0: score = -1
-                    elif count <= 2: score = 1
-                    elif count <= 4: score = 2
-                    elif count <= 6: score = 3
-                    else: score = 4
-                elif name == "牛":
-                    if count == 0: score = -1
-                    elif count == 1: score = 1
-                    elif count <= 3: score = 2
-                    elif count <= 5: score = 3
-                    else: score = 4
+                if name == "小麦": score = -1 if count==0 else (1 if count<=3 else (2 if count<=5 else (3 if count<=7 else 4)))
+                elif name == "野菜": score = -1 if count==0 else (1 if count==1 else (2 if count==2 else (3 if count==3 else 4)))
+                elif name == "羊": score = -1 if count==0 else (1 if count<=3 else (2 if count<=5 else (3 if count<=7 else 4)))
+                elif name == "猪": score = -1 if count==0 else (1 if count<=2 else (2 if count<=4 else (3 if count<=6 else 4)))
+                elif name == "牛": score = -1 if count==0 else (1 if count==1 else (2 if count<=3 else (3 if count<=5 else 4)))
                 elif name == "家族の数": score = count * 3
                 elif name == "乞食の枚数": score = count * -3
                 sub += score
             return sub
 
-        # 入力値が変わるたびに合計を計算するヘルパー
+        # ダイアログ盤面＋手入力値の再計算
         def recalculate_dialog_score():
-            # 現在のダイアログのTextFieldから数値を集計
-            temp_agri = {}
-            for k, field in agri_fields.items():
-                try: temp_agri[k] = int(field.value) if field.value != "" else 0
-                except ValueError: temp_agri[k] = 0
-                
-            temp_card = {}
-            for k, field in card_fields.items():
-                try: temp_card[k] = int(field.value) if field.value != "" else 0
-                except ValueError: temp_card[k] = 0
-
-            # 盤面（畑、家、牧場、未使用）の基礎点数を元の記録から算出
-            # ※ もし過去データにグラフィックパックがない古いログの場合は、総得点から逆算
-            base_board_score = 0
-            if saved_cells_pack:
-                # 本体の得点計算式（table1_total）をシミュレート
-                # ※ 簡易的に「元の最終点数」から「元の資源点」と「元のカード点」を引いて盤面基礎点を固定
-                orig_agri = board_pack.get("agri_inputs", local_agri)
-                orig_card = board_pack.get("card_inputs", local_card)
-                base_board_score = int(record.get('final_score', 0)) - get_local_agri_subtotal(orig_agri) - sum(orig_card.values())
-            else:
-                base_board_score = int(record.get('final_score', 0)) - get_local_agri_subtotal(local_agri) - sum(local_card.values())
-
-            new_total = base_board_score + get_local_agri_subtotal(temp_agri) + sum(temp_card.values())
+            t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
+            t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
+            
+            # 盤面の要素（家、畑）を走査
+            c_counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
+            for cell in d_cell_dict.values():
+                for info in PALETTE_INFO:
+                    if info["name"] in c_counts and cell.bgcolor == info["color"]: c_counts[info["name"]] += 1
+            
+            r_c, u_c, s_c = analyze_d_grid()
+            f_score = -1 if c_counts["畑"]<=1 else (1 if c_counts["畑"]==2 else (2 if c_counts["畑"]==3 else (3 if c_counts["畑"]==4 else 4)))
+            r_score = -1 if r_c==0 else (min(r_c, 4))
+            st_score = min(s_c, 4) if s_c > 0 else 0
+            h_score = (c_counts["レンガの家"] * 1) + (c_counts["石の家"] * 2)
+            u_score = u_c * -1
+            
+            board_total = f_score + r_score + st_score + h_score + u_score
+            new_total = board_total + get_local_agri_score(t_agri) + sum(t_card.values())
             total_score_preview.value = f"合計得点: {new_total} 点"
             total_score_preview.update()
-            return new_total, temp_agri, temp_card
+            return new_total, t_agri, t_card
 
-        # 各種入力が変更されたら数値を更新
+        # テキスト変更時のイベント紐付け
         for field in list(agri_fields.values()) + list(card_fields.values()):
             field.on_change = lambda e: recalculate_dialog_score()
 
-        # --- 3. 修正データの上書き保存（UPDATE）処理 ---
+        # --- 4. 修正データのUPDATE処理 ---
         def save_edited_record(e):
             try:
-                # 最終的な数値を取得
                 final_score, updated_agri, updated_card = recalculate_dialog_score()
-                new_memo_text = detail_memo_input.value.strip()
-
-                # 新しい内部用game_dataパックを再構築（既存のマス目・柵の色グラフィックを維持）
+                
+                # 新しい盤面の色グラフィック状態を抽出して保存パックをシリアライズ
                 new_board_pack = {
-                    "cells": saved_cells_pack.get("cells", []) if saved_cells_pack else [],
-                    "horiz": saved_cells_pack.get("horiz", []) if saved_cells_pack else [],
-                    "vert": saved_cells_pack.get("vert", []) if saved_cells_pack else [],
+                    "cells": [d_cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
+                    "horiz": [d_horiz_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
+                    "vert": [d_vert_dict[(c, r)].bgcolor for c in range(COLS + 1) for r in range(ROWS)],
                     "agri_inputs": updated_agri,
                     "card_inputs": updated_card,
-                    "card_details": saved_cells_pack.get("card_details", {}) if saved_cells_pack else {"職業":[],"小さい進歩":[],"大きい進歩":[]}
+                    "card_details": board_pack.get("card_details", {}) if raw_game_data else {"職業":[],"smaller":[],"bigger":[]}
                 }
-                new_json_str = json.dumps(new_board_pack)
-
-                # Supabaseに上書きUPDATEを送信
+                
                 supabase.table("records").update({
                     "final_score": final_score,
-                    "memo": new_memo_text,
-                    "game_data": new_json_str
+                    "memo": detail_memo_input.value.strip(),
+                    "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
                 page.close(page.dialog)
-                update_my_records_ui() # マイページ履歴一覧の再描画
-                page.overlay.append(ft.SnackBar(ft.Text("📊 スコアと資源の変更を上書き保存しました！"), open=True))
+                update_my_records_ui()
+                page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
             except Exception as ex:
-                show_alert(f"修正データの保存に失敗しました: {ex}")
+                show_alert(f"保存に失敗しました: {ex}")
 
-        # --- 4. UIグリッドの配置（コンパクトに整列） ---
-        agri_grid = ft.Row(
-            controls=list(agri_fields.values()), 
-            wrap=True, spacing=6, alignment=ft.MainAxisAlignment.START
-        )
-        card_grid = ft.Row(
-            controls=list(card_fields.values()), 
-            wrap=True, spacing=6, alignment=ft.MainAxisAlignment.START
-        )
+        # --- 5. UIのグリッド構築 ---
+        agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
+        card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
-        # ダイアログの中身構造を組み立て
         page.dialog = ft.AlertDialog(
-            title=ft.Text("📊 過去スコアデータの直接修正", weight="bold", size=16),
+            title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 登録日時: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
+                    ft.Text("🚜 牧場盤面ボード（パレット選択状態でタップ/柵建設可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
                     ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     agri_grid,
-                    ft.Container(height=5),
                     ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     card_grid,
                     ft.Divider(height=10),
                     detail_memo_input
-                ], spacing=8, tight=True),
-                width=340
+                ], spacing=6, tight=True),
+                width=350
             ),
             actions=[
                 ft.TextButton("キャンセル", on_click=lambda e: page.close(page.dialog)),
