@@ -106,16 +106,13 @@ def main(page: ft.Page):
     _handle_forgot_reset_password = None
     _check_auto_login = None
 
-    # 💡 【決定版・事前宣言】UI作成時にエラーを起こさないよう、単純な空の関数として予約します
+    # 💡 【最終決定版・事前宣言】UI作成時の読み込み順エラーを100%根絶する予約ブロック
     def handle_rename(e): pass
     def handle_change_password(e): pass
     def handle_save_secret_question(e): pass
     def execute_delete_account(): pass
-    def handle_new_register(e): _handle_new_register(e)
-    def handle_forgot_check_user(e): _handle_forgot_check_user(e)
-    def handle_forgot_reset_password(e): _handle_forgot_reset_password(e)
-    def check_auto_login(): _check_auto_login()
-    
+    def open_change_group_dialog(e): pass
+    def handle_save_group_number(e): pass
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -959,10 +956,11 @@ def main(page: ft.Page):
     def _execute_delete_account(): pass
 
     # 実体関数へのバインド
-    _open_change_group_dialog = _open_change_group_dialog
-    _handle_save_group_number = _handle_save_group_number
+    open_change_group_dialog = _open_change_group_dialog
+    handle_save_group_number = _handle_save_group_number
 
-        # =========================================================================
+
+    # =========================================================================
     # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
     # =========================================================================
     def _handle_rename(e):
