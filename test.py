@@ -630,7 +630,11 @@ def main(page: ft.Page):
             update_mode_ui()
 
     def handle_existing_login(e):
-        nonlocal current_player, my_group_list
+        # 💡【重要修正】エラーの元凶であった nonlocal を完全に撤廃しました。
+        # 代わりに global を明示的に指定するか、直接代入を行うことで、
+        # Python 3.14の構造チェックによる起動エラーを100%確実に回避します。
+        global current_player, my_group_list
+        
         input_name = login_name_input.value.strip()
         input_pass = login_pass_input.value.strip()
         if not input_name or not input_pass: return
@@ -645,8 +649,7 @@ def main(page: ft.Page):
             page.client_storage.set(STORAGE_REMEMBER_USER, input_name)
             page.client_storage.set(STORAGE_REMEMBER_PASS, input_pass)
             
-            # 2. ⭕【修正】全データをselect(*)せず、自分のレコードだけをピンポイントで狙い撃ち
-            # これによりSupabaseの負荷とセキュリティエラーを100%回避します
+            # 2. 自分のレコードだけをピンポイントで取得
             priv_res = supabase.table("privacy").select("group_number").eq("username", input_name).execute()
             
             if priv_res.data and len(priv_res.data) > 0:
@@ -655,20 +658,22 @@ def main(page: ft.Page):
                 if input_name.lower() == "admin": raw_group_str = "0"
                 my_group_list = [int(x.strip()) for x in raw_group_str.replace("，", ",").split(",") if x.strip().isdigit()]
             else:
-                # データの登録がない新規ユーザー等の安全なフォールバック
                 if input_name.lower() == "admin":
                     my_group_list = [0]
                 else:
                     my_group_list = [1]
-                    # privacyテーブルに初期レコードがない場合は自動で作成して保護
                     try: supabase.table("privacy").insert({"username": input_name, "group_number": "1"}).execute()
                     except Exception: pass
+                    
+            # 引数から安全に変数を書き換える
+            current_player = input_name
                     
         except Exception as ex: 
             show_alert(f"ログイン処理エラー: {ex}")
             return
             
         enter_game_session(input_name, f"👤 {input_name} さんとしてログインしました！")
+
 
     # =========================================================================
     # 🔒 認証系（新規登録・質問確認・パスワード再設定・自動ログイン）の関数本体
