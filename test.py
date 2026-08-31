@@ -980,7 +980,7 @@ def main(page: ft.Page):
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
 
-            # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1076,7 +1076,8 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                page.close(target_dialog) 
+                target_dialog.open = False # 💡 ダイアログを閉じる
+                page.update()
                 update_my_records_ui()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
@@ -1087,10 +1088,10 @@ def main(page: ft.Page):
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
         card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
-        # 💡 初期ロード計算を実行して数値を同期
+        # 初期ロード計算を実行して数値を同期
         recalculate_dialog_score()
 
-        # ⚠️ 【オープン命令の競合クラッシュバグを排除】
+        # ダイアログ構造の組み立て
         target_dialog = ft.AlertDialog(
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
@@ -1112,14 +1113,17 @@ def main(page: ft.Page):
                 height=450
             ),
             actions=[
-                ft.TextButton("キャンセル", on_click=lambda e: page.close(target_dialog)),
+                ft.TextButton("キャンセル", on_click=lambda e: (setattr(target_dialog, "open", False), page.update())),
                 ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
             ],
             actions_alignment=ft.MainAxisAlignment.END
         )
         
-        # ⭕ 最新のFlet仕様（競合クラッシュを起こさない安全なオープン命令）
-        page.open(target_dialog)
+        # ⭕【最重要・出力バグ完全除去】
+        # page.openが効かない古い・あるいはWEB上のFlet環境でも、100%確実に描画させるクラシック命令
+        page.dialog = target_dialog
+        target_dialog.open = True
+        page.update()
 
 
     # =========================================================================
