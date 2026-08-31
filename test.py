@@ -323,7 +323,7 @@ def main(page: ft.Page):
                     counts[info["name"]] += 1
 
         rows = []
-        total_score = 0
+        table1_subtotal = 0
         field_count = counts["畑"]
         if field_count <= 1: field_score = -1
         elif field_count == 2: field_score = 1
@@ -331,20 +331,20 @@ def main(page: ft.Page):
         elif field_count == 4: field_score = 3
         else: field_score = 4
 
-        total_score += field_score
+        table1_subtotal += field_score
         rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("畑", size=14, weight="bold", color=ft.Colors.AMBER_700)), ft.DataCell(ft.Text(f"{field_count} 個", size=14)), ft.DataCell(ft.Text(f"{field_score} 点", size=14, weight="bold"))]))
 
         if ranch_count == 0: ranch_score = -1
         elif ranch_count <= 4: ranch_score = ranch_count
         else: ranch_score = 4
 
-        total_score += ranch_score
+        table1_subtotal += ranch_score
         rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("牧場", size=14, weight="bold", color=ft.Colors.BROWN_700)), ft.DataCell(ft.Text(f"{ranch_count} つ", size=14)), ft.DataCell(ft.Text(f"{ranch_score} 点", size=14, weight="bold"))]))
     
         limited_ranch_stable_count = min(ranch_stable_count, 4)
         if ranch_stable_count > 0:
             score = limited_ranch_stable_count
-            total_score += score
+            table1_subtotal += score
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("厩", size=14, weight="bold", color=ft.Colors.LIGHT_BLUE_700)), ft.DataCell(ft.Text(f"{ranch_stable_count} つ", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
         
         for info in PALETTE_INFO:
@@ -353,18 +353,25 @@ def main(page: ft.Page):
             count = counts[name]
             if count > 0:
                 score = count * 1 if name == "レンガの家" else (count * 2 if name == "石の家" else 0)
-                total_score += score
+                table1_subtotal += score
                 rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=info["color"] if info["color"] != ft.Colors.GREEN_400 else ft.Colors.GREEN_700)), ft.DataCell(ft.Text(f"{count} 個", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
         
         if unused_count > 0:
             score = unused_count * -1
-            total_score += score
+            table1_subtotal += score
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("未使用", size=14, color=ft.Colors.BLUE_GREY_600)), ft.DataCell(ft.Text(f"{unused_count} マス", size=14)), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
 
+        # ⭕ 表1の合計行を追加
+        rows.append(ft.DataRow(color=ft.Colors.BLUE_GREY_50, cells=[
+            ft.DataCell(ft.Text("盤面 小計", size=14, weight="bold")),
+            ft.DataCell(ft.Text("")),
+            ft.DataCell(ft.Text(f"{table1_subtotal} 点", size=14, weight="bold", color=ft.Colors.BLUE_700))
+        ]))
         count_table.rows = rows
 
     def update_data_table2():
         rows = []
+        table2_subtotal = 0
         for name, count in agri_inputs.items():
             score = -1
             text_color = ft.Colors.BLACK
@@ -407,6 +414,8 @@ def main(page: ft.Page):
             elif name == "家族の数": score = count * 3
             elif name == "乞食の枚数": score = count * -3
 
+            table2_subtotal += score
+
             def make_on_change(k=name):
                 return lambda e: on_input_change(k, e.control.value)
                 
@@ -421,7 +430,15 @@ def main(page: ft.Page):
                 on_focus=clear_card_on_focus
             )
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(ft.Text(f"{score} 点", size=14, weight="bold"))]))
+        
+        # ⭕ 表2の合計行を追加
+        rows.append(ft.DataRow(color=ft.Colors.BLUE_GREY_50, cells=[
+            ft.DataCell(ft.Text("資源 小計", size=14, weight="bold")),
+            ft.DataCell(ft.Text("")),
+            ft.DataCell(ft.Text(f"{table2_subtotal} 点", size=14, weight="bold", color=ft.Colors.BLUE_700))
+        ]))
         count_table2.rows = rows
+
 
     def close_dialog(e):
         page.close(page.dialog)
@@ -520,17 +537,16 @@ def main(page: ft.Page):
         page.open(page.dialog)
         refresh_dialog_ui()
 
-    # 3つ目の表（カードボーナス）を計算・更新する関数
     def update_data_table3():
         rows = []
-        sub_total = 0
+        table3_subtotal = 0
 
         for name, score in card_inputs.items():
             if name == "職業": text_color = ft.Colors.CYAN_800
             elif name == "小さい進歩": text_color = ft.Colors.TEAL_700
             elif name == "大きい進歩": text_color = ft.Colors.RED_900
 
-            sub_total += score
+            table3_subtotal += score
 
             def make_on_change(k=name): return lambda e: on_card_input_change(k, e.control.value)
             
@@ -545,7 +561,6 @@ def main(page: ft.Page):
                 on_focus=clear_card_on_focus
             )
 
-            # ⭕【バグ修正】未定義だった detail_btn を正しく定義
             detail_btn = ft.ElevatedButton(
                 text="入力", style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=text_color, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(5)),
                 on_click=lambda e, k=name: show_card_dialog(k)
@@ -553,16 +568,12 @@ def main(page: ft.Page):
 
             rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(name, size=14, weight="bold", color=text_color)), ft.DataCell(input_field), ft.DataCell(detail_btn)]))
 
-        rows.append(
-            ft.DataRow(
-                color=ft.Colors.GREY_100,
-                cells=[
-                    ft.DataCell(ft.Text("合計点", size=14, weight="bold", color=ft.Colors.BLACK)),
-                    ft.DataCell(ft.Text(f"{sub_total} 点", size=14, weight="bold", color=ft.Colors.RED_700 if sub_total < 0 else ft.Colors.GREEN_700)),
-                    ft.DataCell(ft.Text("", size=16)),
-                ]
-            )
-        )
+        # ⭕ 表3の合計行を追加
+        rows.append(ft.DataRow(color=ft.Colors.BLUE_GREY_50, cells=[
+            ft.DataCell(ft.Text("カード 小計", size=14, weight="bold")),
+            ft.DataCell(ft.Text("")),
+            ft.DataCell(ft.Text(f"{table3_subtotal} 点", size=14, weight="bold", color=ft.Colors.BLUE_700))
+        ]))
         count_table3.rows = rows
 
     # ⭕【完全連動・修正版】カードボーナスの手入力値をリアルタイムに表と総合点へ反映
