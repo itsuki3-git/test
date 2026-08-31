@@ -92,7 +92,7 @@ def main(page: ft.Page):
 
     def show_alert(message, title="エラー"):
         alert_dialog = ft.AlertDialog(title=ft.Text(title), content=ft.Text(message))
-        alert_dialog.actions = [ft.TextButton("OK", on_click=lambda e: (setattr(alert_dialog, "open", False), page.update()))]
+        alert_dialog.actions = [ft.TextButton("OK", on_click=lambda e: page.close(alert_dialog))]
         page.open(alert_dialog)
 
     def hash_password(password: str) -> str:
@@ -112,6 +112,19 @@ def main(page: ft.Page):
     def handle_forgot_check_user(e): pass
     def handle_forgot_reset_password(e): pass
     def save_current_game(e): pass
+
+    # 行（Row）を生成する補助関数
+    def create_group_input_row(val):
+        tf = ft.TextField(value=str(val), width=100, height=40, text_size=14, keyboard_type=ft.KeyboardType.NUMBER)
+        row = ft.Row([tf])
+        btn_del = ft.IconButton(ft.Icons.REMOVE_CIRCLE_OUTLINE, icon_color=ft.Colors.RED_400, on_click=lambda e: (group_inputs_container.controls.remove(row), page.update()))
+        row.controls.append(btn_del)
+        return row
+
+    # 「グループを追加」ボタンが参照する関数
+    def add_blank_group_input_row(e):
+        group_inputs_container.controls.append(create_group_input_row("1"))
+        page.update()
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -704,9 +717,9 @@ def main(page: ft.Page):
         
         # 🚜 現在の盤面の色、柵、手入力値をすべて1つのパックにパックしてシリアライズ
         board_pack = {
-            "cells": [cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
-            "horiz": [horiz_line_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
-            "vert": [vert_line_dict[(c, r)].bgcolor for c in range(COLS + 1) for r in range(ROWS)],
+            "cells": [str(cell_dict[(r, c)].bgcolor) for r in range(ROWS) for c in range(COLS)],
+            "horiz": [str(horiz_line_dict[(r, c)].bgcolor) for r in range(ROWS + 1) for c in range(COLS)],
+            "vert": [str(vert_line_dict[(c, r)].bgcolor) for c in range(COLS + 1) for r in range(ROWS)],
             "agri_inputs": agri_inputs,
             "card_inputs": card_inputs,
             "card_details": card_details
@@ -1317,7 +1330,7 @@ def main(page: ft.Page):
             else:
                 for g in sorted(my_group_list):
                     ranking_group_dropdown.options.append(ft.dropdown.Option(str(g), f"グループ {g}"))
-                ranking_group_dropdown.value = str(my_group_list) if my_group_list else None
+                ranking_group_dropdown.value = str(my_group_list[0]) if my_group_list else None
         except Exception:
             ranking_group_dropdown.options.append(ft.dropdown.Option("1", "グループ 1"))
             ranking_group_dropdown.value = "1"
