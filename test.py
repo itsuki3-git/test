@@ -112,6 +112,9 @@ def main(page: ft.Page):
     def handle_forgot_check_user(e): pass
     def handle_forgot_reset_password(e): pass
     def save_current_game(e): pass
+    def add_blank_group_input_row(e): pass
+    def open_change_group_dialog(e): pass
+
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -1210,6 +1213,37 @@ def main(page: ft.Page):
         for g_num in my_group_list: group_inputs_container.controls.append(create_group_input_row(g_num))
         if not group_inputs_container.controls: group_inputs_container.controls.append(create_group_input_row("1"))
         page.open(change_group_dialog)
+
+        # =========================================================================
+    # 🔢 グループ管理ダイアログの動的行追加・削除ロジックの実体
+    # =========================================================================
+    def create_group_input_row(initial_value=""):
+        tf = ft.TextField(value=str(initial_value), label="グループ番号", keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+        row = ft.Row(spacing=5)
+        row.controls = [tf, ft.IconButton(icon=ft.Icons.DELETE_OUTLINED, icon_color=ft.Colors.RED_400, on_click=lambda e: remove_group_input_row(row))]
+        return row
+
+    def remove_group_input_row(row_control):
+        if len(group_inputs_container.controls) <= 1: return
+        group_inputs_container.controls.remove(row_control)
+        page.update()
+
+    def _add_blank_group_input_row(e):
+        group_inputs_container.controls.append(create_group_input_row(""))
+        page.update()
+
+    def _open_change_group_dialog(e):
+        group_inputs_container.controls.clear()
+        for g_num in my_group_list: 
+            group_inputs_container.controls.append(create_group_input_row(g_num))
+        if not group_inputs_container.controls: 
+            group_inputs_container.controls.append(create_group_input_row("1"))
+        page.open(change_group_dialog)
+
+    # 💡 最上部の事前宣言（ボタンに紐づいている変数名）に、実体関数を確実にバインド
+    add_blank_group_input_row = _add_blank_group_input_row
+    open_change_group_dialog = _open_change_group_dialog
+
 
     def _handle_save_group_number(e):
         nonlocal my_group_list
