@@ -106,13 +106,15 @@ def main(page: ft.Page):
     _handle_forgot_reset_password = None
     _check_auto_login = None
 
-    # 💡 【最終決定版・事前宣言】UI作成時の読み込み順エラーを100%根絶する予約ブロック
+    # 💡 【真の最終決定版・事前宣言】UI作成時の読み込み順エラーをすべて根絶する予約ブロック
     def handle_rename(e): pass
     def handle_change_password(e): pass
     def handle_save_secret_question(e): pass
     def execute_delete_account(): pass
     def open_change_group_dialog(e): pass
     def handle_save_group_number(e): pass
+    def handle_forgot_check_user(e): pass
+    def handle_forgot_reset_password(e): pass
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
@@ -732,10 +734,10 @@ def main(page: ft.Page):
             handle_existing_login(None)
 
     # 上部で作成した予約ラッパーへ実体をバインド
-    _handle_new_register = _handle_new_register
-    _handle_forgot_check_user = _handle_forgot_check_user
-    _handle_forgot_reset_password = _handle_forgot_reset_password
-    _check_auto_login = _check_auto_login
+    handle_new_register = _handle_new_register
+    handle_forgot_check_user = _handle_forgot_check_user
+    handle_forgot_reset_password = _handle_forgot_reset_password
+    check_auto_login = _check_auto_login
 
     def enter_game_session(username, success_message):
         nonlocal current_player
