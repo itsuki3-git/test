@@ -100,11 +100,16 @@ def main(page: ft.Page):
         jst = timezone(timedelta(hours=9))
         return datetime.now(jst).strftime("%Y/%m/%d %H:%M")
 
-    # 💡 【重要】後半で定義する関数をあらかじめ事前宣言して、読み込み順のエラーを完全に防止します
+    # 💡 【完全版】後半で定義するすべての関数を予約し、定義順エラーを100%防止します
     handle_rename = lambda e: None
     handle_change_password = lambda e: None
     handle_save_secret_question = lambda e: None
     execute_delete_account = lambda e: None
+    handle_forgot_check_user = lambda e: None
+    handle_forgot_reset_password = lambda e: None
+    open_change_group_dialog = lambda e: None
+    handle_save_group_number = lambda e: None
+
 
     # --- 牧場（閉空間）と未使用パネル、および柵に囲まれた厩を数えるアルゴリズム ---
     def analyze_grid():
