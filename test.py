@@ -292,18 +292,16 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ 詳細・修正ダイアログを開く関数
                 def make_open_detail_click(rec=record):
                     return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # ⭕ 行全体をクリッカブル（InkWell）にし、タップしたら詳細を開くように変更
-                card_content = ft.InkWell(
-                    on_click=make_open_detail_click(),
-                    border_radius=8,
-                    content=ft.Padding(
+                # ⭕【修正】ft.InkWell から ft.GestureDetector に変更
+                card_content = ft.GestureDetector(
+                    on_tap=make_open_detail_click(), # InkWellのon_clickからon_tapに変更
+                    content=ft.Container(
                         padding=12,
                         content=ft.Row(controls=[
                             ft.Column([
@@ -316,6 +314,7 @@ def main(page: ft.Page):
                 )
                 my_records_list.controls.append(ft.Container(content=card_content, border=ft.border.all(1, ft.Colors.BLUE_100), border_radius=8, bgcolor=ft.Colors.BLUE_50))
             page.update()
+
 
     # ⭕ 新設：選択されたスコアの詳細確認とメモを直接アップデートするダイアログシステム
     def show_record_detail_dialog(record):
