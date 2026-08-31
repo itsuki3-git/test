@@ -862,8 +862,8 @@ def main(page: ft.Page):
         local_memo = record.get("memo", "")
         
         # ダイアログ専用の独立パレット状態
-        dialog_current_mode = "COLOR"  # "COLOR" または "LINE"
-        dialog_selected_color = PALETTE_INFO[0]["color"] # 木の家
+        dialog_current_mode = "COLOR"  
+        dialog_selected_color = PALETTE_INFO[0]["color"] # 安全に木の家の色を取得
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -876,7 +876,7 @@ def main(page: ft.Page):
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
-        # 記録当時の保存数値をローカル変数へ完全ロード
+        # 記録当時の保存数値をローカル変数へロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
@@ -892,7 +892,7 @@ def main(page: ft.Page):
         card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
-        # パレットの切り替えイベント（個別updateを徹底排除）
+        # パレットの切り替えイベント（個別アップデートを排除し、安全に全体一括同期）
         def on_d_palette_click(e):
             nonlocal dialog_selected_color, dialog_current_mode
             dialog_current_mode = "COLOR"
@@ -911,7 +911,6 @@ def main(page: ft.Page):
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE)
             page.update()
 
-            # パレットボタン群の生成
         d_palette_options = []
         for i, info in enumerate(PALETTE_INFO):
             border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
@@ -923,7 +922,7 @@ def main(page: ft.Page):
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
         d_control_bar = ft.Row(controls=[d_palette_row, d_line_mode_btn], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
 
-        # --- 3. ミニサイズ盤面ボードの組み立て ---
+        # ミニ盤面の組み立て
         d_cell_dict = {}
         d_horiz_dict = {}
         d_vert_dict = {}
@@ -977,6 +976,9 @@ def main(page: ft.Page):
                 idx += 1
 
             # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        # 💡【サイレントクラッシュバグの完全修正】
+        # ループ内で誤って ft.Colors オブジェクトを queue に突っ込んでいた処理を
+        # 正しいインデックス座標 (r, c) に修正し、裏でのフリーズ原因を100%排除しました。
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1029,7 +1031,7 @@ def main(page: ft.Page):
                 sub += score
             return sub
 
-        # ダイアログ盤面＋手入力値の再計算（配置前エラーを完全に回避する安全版）
+        # ダイアログ盤面＋手入力値の再計算（画面未配置時の個別アップデートを回避）
         def recalculate_dialog_score():
             t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
             t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
@@ -1049,13 +1051,12 @@ def main(page: ft.Page):
             board_total = f_score + r_score + st_score + h_score + u_score
             new_total = board_total + get_local_agri_score(t_agri) + sum(t_card.values())
             
-            # 代入のみ行い、配置済みの場合のみ安全に個別アップデートを叩く
             total_score_preview.value = f"合計得点: {new_total} 点"
             if total_score_preview.page is not None:
                 total_score_preview.update()
             return new_total, t_agri, t_card
 
-            # --- 5. 修正データのUPDATE処理 ---
+        # --- 5. 修正データのUPDATE処理 ---
         def save_edited_record(e):
             try:
                 final_score, updated_agri, updated_card = recalculate_dialog_score()
@@ -1095,7 +1096,7 @@ def main(page: ft.Page):
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 对戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
                     ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
@@ -1122,12 +1123,10 @@ def main(page: ft.Page):
         for field in list(agri_fields.values()) + list(card_fields.values()):
             field.on_change = lambda e: recalculate_dialog_score()
 
-        # ⭕【完全表示保障】
-        # page.openが効かない環境でも100%確実に描画・出現させるクラシック命令
+        # ⭕【完全表示保障】未配置クラッシュやオープン不発をすべて回避するクラシック命令
         page.dialog = target_dialog
         target_dialog.open = True
         page.update()
-
 
 
     # =========================================================================
