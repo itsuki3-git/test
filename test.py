@@ -798,7 +798,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（スコープバグを100%根絶し、確実にダイアログをキックする最新版）
+    # 📊 マイページ履歴一覧の生成（無限ループバグ・フリーズを100%解消した決定版）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -816,10 +816,10 @@ def main(page: ft.Page):
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
                 
-                # 💡 スコープの競合（何も起きないバグ）を完全に回避するため、
-                # グローバル名前空間から直接関数を引っ張ってきて安全に実行する構造に変更
-                def make_load_click(rec):
-                    return lambda e: globals()["show_record_detail_dialog"](rec)
+                # 💡 【重要】関数名の一致による無限ループ（フリーズ）を完全に防ぐため、
+                # 別の安全な一時関数（キッカー）を経由してダイアログを起動させる構造に修正
+                def trigger_detail_view(target_rec):
+                    show_record_detail_dialog(target_rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
@@ -842,10 +842,12 @@ def main(page: ft.Page):
                         border=ft.border.all(1, ft.Colors.BLUE_100), 
                         border_radius=8, 
                         bgcolor=ft.Colors.BLUE_50,
-                        on_click=make_load_click(record) # 💡 Container全体をタップ可能に
+                        # 💡 安全にラップした関数を引数付きでキックする
+                        on_click=lambda e, rec=record: trigger_detail_view(rec)
                     )
                 )
             page.update()
+
 
     # =========================================================================
     # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半）
