@@ -850,6 +850,15 @@ def main(page: ft.Page):
     # =========================================================================
     def show_record_detail_dialog(record):
         import json
+        # 🧪 【不具合調査用】どこで処理が止まっているか画面に表示する
+        debug_logs = []
+        def log(msg):
+            debug_logs.append(msg)
+            print(f"[DEBUG_DIALOG] {msg}") # コンソールにも出力
+
+        log("1. show_record_detail_dialog が起動しました")
+        log(f"データ型: {type(record.get('game_data'))}")
+
         
         # 💡 クラッシュ防止のための初期値（デフォルト文字列）
         dialog_cell_bgcolors = ["grey100"] * (ROWS * COLS)
@@ -1146,7 +1155,23 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         
-        page.open(target_dialog)
+        # 🧪 【不具合調査用】もし開かない場合は、エラーダイアログを代わりに強制起動する
+        try:
+            log("2. 盤面組み立て完了、ダイアログを開きます")
+            page.open(target_dialog)
+        except Exception as dialog_ex:
+            log(f"❌ ダイアログ起動クラッシュ: {dialog_ex}")
+            
+        # 💡 万が一開かない場合のための、ログ確認用緊急ダイアログ
+        debug_dialog = ft.AlertDialog(
+            title=ft.Text("🧪 デバッグログ確認"),
+            content=ft.Container(
+                content=ft.Column([ft.Text(l, size=12, color=ft.Colors.RED if "❌" in l else ft.Colors.BLACK) for l in debug_logs], scroll=ft.ScrollMode.AUTO),
+                width=300, height=200
+            ),
+            actions=[ft.TextButton("閉じる", on_click=lambda e: page.close(debug_dialog))]
+        )
+        page.open(debug_dialog)
 
 
     # =========================================================================
