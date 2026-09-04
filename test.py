@@ -798,7 +798,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（タップ競合を完全に排除した最新版）
+    # 📊 マイページ履歴一覧の生成（タップ範囲をカード全体に広げ、確実に反応するよう修正）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -821,22 +821,26 @@ def main(page: ft.Page):
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
+                # 💡 Container 自体に on_click と OPAQUE（不透明な当たり判定）を持たせることで確実にタップを検知
                 my_records_list.controls.append(
                     ft.Container(
-                        content=ft.GestureDetector(
-                            on_tap=make_load_click(), # 💡 タップイベントを確実にキャッチ
-                            content=ft.Row(controls=[
-                                ft.Column([
-                                    ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                                    ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
-                                ], expand=True),
-                                ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-                        ),
+                        content=ft.Row(controls=[
+                            ft.Column([
+                                ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                                ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
+                            ], expand=True),
+                            ft.IconButton(
+                                ft.Icons.DELETE_FOREVER, 
+                                icon_color=ft.Colors.RED_600, 
+                                tooltip="この記録を削除", 
+                                on_click=lambda e, idx=record["id"]: delete_saved_record(idx)
+                            )
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         padding=12, 
                         border=ft.border.all(1, ft.Colors.BLUE_100), 
                         border_radius=8, 
-                        bgcolor=ft.Colors.BLUE_50
+                        bgcolor=ft.Colors.BLUE_50,
+                        on_click=make_load_click() # 💡 枠線の中ならどこを押しても反応するように修正
                     )
                 )
             page.update()
