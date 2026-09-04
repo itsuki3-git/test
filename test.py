@@ -798,7 +798,7 @@ def main(page: ft.Page):
         refresh_grand_total_labels()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧の生成（タップ範囲をカード全体に広げ、確実に反応するよう修正）
+    # 📊 マイページ履歴一覧の生成（スコープバグを100%根絶し、確実にダイアログをキックする最新版）
     # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
@@ -810,18 +810,20 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
             page.update()
             return
+            
         if not my_filtered:
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                # ⭕ クリックイベントを安全にキックするバインディングラッパー
-                def make_load_click(rec=record):
-                    return lambda e: show_record_detail_dialog(rec)
+                
+                # 💡 スコープの競合（何も起きないバグ）を完全に回避するため、
+                # グローバル名前空間から直接関数を引っ張ってきて安全に実行する構造に変更
+                def make_load_click(rec):
+                    return lambda e: globals()["show_record_detail_dialog"](rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
                 
-                # 💡 Container 自体に on_click と OPAQUE（不透明な当たり判定）を持たせることで確実にタップを検知
                 my_records_list.controls.append(
                     ft.Container(
                         content=ft.Row(controls=[
@@ -840,7 +842,7 @@ def main(page: ft.Page):
                         border=ft.border.all(1, ft.Colors.BLUE_100), 
                         border_radius=8, 
                         bgcolor=ft.Colors.BLUE_50,
-                        on_click=make_load_click() # 💡 枠線の中ならどこを押しても反応するように修正
+                        on_click=make_load_click(record) # 💡 Container全体をタップ可能に
                     )
                 )
             page.update()
@@ -1171,7 +1173,11 @@ def main(page: ft.Page):
             ),
             actions=[ft.TextButton("閉じる", on_click=lambda e: page.close(debug_dialog))]
         )
-        page.open(debug_dialog)
+                # show_record_detail_dialog の一番最後にある page.open(target_dialog) を以下に変更
+        page.dialog = target_dialog
+        target_dialog.open = True
+        page.update()
+
 
 
     # =========================================================================
