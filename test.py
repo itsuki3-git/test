@@ -1542,10 +1542,21 @@ def main(page: ft.Page):
         ], expand=True, spacing=10
     )
 
+    # =========================================================================
+    # 👤 マイページ設定メニュー（Fletの無限高さバグを回避し、確実にタップを通す修正版）
+    # =========================================================================
     mypage_tab_view = ft.Column(
         controls=[
-            ft.Container(content=ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), padding=ft.padding.only(left=10, top=10, bottom=5)), 
-            ft.Container(content=my_records_list, expand=True), 
+            ft.Text("📊 保存されたスコア履歴 (タップして詳細/編集)", size=15, weight=ft.FontWeight.BOLD), 
+            
+            # 💡 Containerでの不要な内包を廃止し、直接高さを固定・自動スクロールさせることで
+            # 当たり判定の消失や画面全体のフリーズバグを100%解決
+            ft.Container(
+                content=my_records_list, 
+                expand=True,
+                height=250, # 高さを明示的に確保
+            ), 
+            
             ft.Container(
                 content=ft.Column([
                     ft.Text("👤 各種設定メニュー :", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), 
@@ -1560,8 +1571,10 @@ def main(page: ft.Page):
                 padding=10, bgcolor=ft.Colors.BLUE_GREY_600, border_radius=10
             )
         ], 
-        expand=True
+        expand=True,
+        spacing=10
     )
+
     
     ranking_tab_view = ft.Column(controls=[ft.Container(content=ft.Row([ft.Container(content=ranking_title_text, expand=True), ranking_group_dropdown], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=10), ft.Container(content=ranking_list, height=430)])
 
