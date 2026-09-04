@@ -799,9 +799,6 @@ def main(page: ft.Page):
         update_data_table(ranch_c, unused_c, ranch_stable)
         refresh_grand_total_labels()
 
-    # =========================================================================
-    # 📊 マイページ履歴一覧の生成（無限ループバグ・フリーズを100%解消した決定版）
-    # =========================================================================
     def update_my_records_ui():
         my_records_list.controls.clear()
         if not current_player: return
@@ -812,16 +809,13 @@ def main(page: ft.Page):
             my_records_list.controls.append(ft.Text(f"データ取得エラー: {ex}", color=ft.Colors.RED))
             page.update()
             return
-            
         if not my_filtered:
             my_records_list.controls.append(ft.Text("保存された記録はありません", italic=True, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         else:
             for record in sorted(my_filtered, key=lambda x: x["id"], reverse=True):
-                
-                # 💡 【重要】関数名の一致による無限ループ（フリーズ）を完全に防ぐため、
-                # 別の安全な一時関数（キッカー）を経由してダイアログを起動させる構造に修正
-                def trigger_detail_view(target_rec):
-                    show_record_detail_dialog(target_rec)
+                # 💡 無限ループと表示バグを防ぐため、安全に関数をキックする
+                def make_click_handler(rec=record):
+                    return lambda e: show_record_detail_dialog(rec)
 
                 memo_str = record.get("memo", "")
                 memo_preview = f" 📝 {memo_str}" if memo_str else " (メモなし)"
@@ -833,23 +827,16 @@ def main(page: ft.Page):
                                 ft.Text(f"合計得点: {record['final_score']} 点", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
                                 ft.Text(value=f"登録日: {record['date']}{memo_preview}", size=12, color=ft.Colors.GREY_600)
                             ], expand=True),
-                            ft.IconButton(
-                                ft.Icons.DELETE_FOREVER, 
-                                icon_color=ft.Colors.RED_600, 
-                                tooltip="この記録を削除", 
-                                on_click=lambda e, idx=record["id"]: delete_saved_record(idx)
-                            )
+                            ft.IconButton(ft.Icons.DELETE_FOREVER, icon_color=ft.Colors.RED_600, tooltip="この記録を削除", on_click=lambda e, idx=record["id"]: delete_saved_record(idx))
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         padding=12, 
                         border=ft.border.all(1, ft.Colors.BLUE_100), 
                         border_radius=8, 
                         bgcolor=ft.Colors.BLUE_50,
-                        # 💡 安全にラップした関数を引数付きでキックする
-                        on_click=lambda e, rec=record: trigger_detail_view(rec)
+                        on_click=make_click_handler() # 👈 カード全体をタップ可能に
                     )
                 )
             page.update()
-
 
     # =========================================================================
     # 📊 マイページ履歴一覧から、タップして100%確実に直接編集・上書き保存できる詳細ダイアログ（前半）
@@ -1112,8 +1099,7 @@ def main(page: ft.Page):
                 show_alert(f"保存に失敗しました: {ex}")
 
         def close_dialog_view(e):
-            # 💡 自作コンテナを最前面レイヤー（overlay）から削除して閉じる
-            page.overlay.remove(target_dialog)
+            page.overlay.remove(target_overlay_dialog)
             page.update()
 
         # UIのグリッド構築
@@ -1122,12 +1108,12 @@ def main(page: ft.Page):
 
         recalculate_dialog_score()
 
-        # 💡 【バグ解決の核心】Fletのタブ内表示バグを完全回避するためにダイアログ（暗幕コンテナ）を自作
+        # 💡 【バグ回避】FletのAlertDialogを使わず、白枠のコンテンツをコンテナで作る
         dialog_content = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=16, color=ft.Colors.BLACK),
-                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dialog_view, icon_color=ft.Colors.GREY_600)
+                    ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=16),
+                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dialog_view)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                 total_score_preview,
@@ -1135,7 +1121,7 @@ def main(page: ft.Page):
                 ft.Text("🚜 牧場盤面ボードとパレット", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                 ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
                 ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
-                ft.Text("🌾 資源・家族の数 (数値変更で自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                 agri_grid,
                 ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                 card_grid,
@@ -1153,8 +1139,8 @@ def main(page: ft.Page):
             max_height=600,
         )
 
-        # 💡 画面全体を覆う半透明黒のフルスクリーンコンテナ
-        target_dialog = ft.Container(
+        # 💡 画面全体を覆う半透明黒のバックドロップ（暗幕）を自作
+        target_overlay_dialog = ft.Container(
             content=dialog_content,
             bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
             alignment=ft.alignment.center,
@@ -1164,12 +1150,9 @@ def main(page: ft.Page):
             height=page.window_height
         )
         
-        # 💡 page.openを使わず、overlayに直接追加することで100%強制描画させる
-        page.overlay.append(target_dialog)
+        # 💡 page.open() は使わず、最前面レイヤー（overlay）へ直接追加して強制表示
+        page.overlay.append(target_overlay_dialog)
         page.update()
-
-
-
 
     # =========================================================================
     # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
