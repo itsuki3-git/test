@@ -846,20 +846,49 @@ def main(page: ft.Page):
             page.update()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半・修正版）
+    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（不具合対策版）
     # =========================================================================
     def show_record_detail_dialog(record):
         import json
-        raw_game_data = record.get("game_data", "")
         
-        # ダイアログ専用の独立したローカル状態管理変数
+        # 💡 クラッシュ防止のための初期値（デフォルト文字列）
+        dialog_cell_bgcolors = ["grey100"] * (ROWS * COLS)
+        dialog_horiz_bgcolors = ["grey300"] * ((ROWS + 1) * COLS)
+        dialog_vert_bgcolors = ["grey300"] * ((COLS + 1) * ROWS)
+        
         local_agri = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
-        local_memo = record.get("memo", "")
-        
-        # 💡 【バグ修正】PALETTE_INFOはリストなので、[0]番目の要素からcolorを取り出す
+        local_memo = str(record.get("memo", "")) if record.get("memo") else ""
+
+        # 💡 データの読み込み部分を徹底的に保護（データが壊れていても無視して進む）
+        raw_game_data = record.get("game_data", "")
+        if raw_game_data:
+            try:
+                # 文字列型であればパースする
+                if isinstance(raw_game_data, str):
+                    board_pack = json.loads(raw_game_data)
+                else:
+                    board_pack = raw_game_data
+                
+                if isinstance(board_pack, dict):
+                    if "agri_inputs" in board_pack and isinstance(board_pack["agri_inputs"], dict):
+                        local_agri.update(board_pack["agri_inputs"])
+                    if "card_inputs" in board_pack and isinstance(board_pack["card_inputs"], dict):
+                        local_card.update(board_pack["card_inputs"])
+                    
+                    # 色データがオブジェクトで壊れて保存されている場合は文字列として抽出
+                    if "cells" in board_pack and isinstance(board_pack["cells"], list):
+                        dialog_cell_bgcolors = [str(c) for c in board_pack["cells"]]
+                    if "horiz" in board_pack and isinstance(board_pack["horiz"], list):
+                        dialog_horiz_bgcolors = [str(h) for h in board_pack["horiz"]]
+                    if "vert" in board_pack and isinstance(board_pack["vert"], list):
+                        dialog_vert_bgcolors = [str(v) for v in board_pack["vert"]]
+            except Exception:
+                pass # 万が一読み込みでエラーが出ても、絶対にアプリを落とさず初期状態で開く
+
+        # 独立したパレット状態（PALETTE_INFOの安全な参照）
         dialog_current_mode = "COLOR"  
-        dialog_selected_color = PALETTE_INFO[0]["color"] 
+        dialog_selected_color = PALETTE_INFO[0]["color"] if (isinstance(PALETTE_INFO, list) and len(PALETTE_INFO) > 0) else ft.Colors.GREEN_400
 
         D_CELL_W, D_CELL_H = 40, 40
         D_LINE_THICK = 3
@@ -867,21 +896,6 @@ def main(page: ft.Page):
         D_OFFSET = D_HIT_BOX_EXT
         D_TOTAL_W = D_CELL_W * COLS + (D_OFFSET * 2)
         D_TOTAL_H = D_CELL_H * ROWS + (D_OFFSET * 2)
-
-        dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
-        dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
-        dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
-
-        # 💡 記録当時の保存データをローカル配列へ完全ロード
-        if raw_game_data:
-            try:
-                board_pack = json.loads(raw_game_data)
-                if "agri_inputs" in board_pack: local_agri.update(board_pack["agri_inputs"])
-                if "card_inputs" in board_pack: local_card.update(board_pack["card_inputs"])
-                if "cells" in board_pack and board_pack["cells"]: dialog_cell_bgcolors = board_pack["cells"]
-                if "horiz" in board_pack and board_pack["horiz"]: dialog_horiz_bgcolors = board_pack["horiz"]
-                if "vert" in board_pack and board_pack["vert"]: dialog_vert_bgcolors = board_pack["vert"]
-            except Exception: pass
 
         detail_memo_input = ft.TextField(label="対戦メモ", value=local_memo, multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
         
@@ -917,11 +931,12 @@ def main(page: ft.Page):
 
         # 内蔵パレットUIの組み立て
         d_palette_options = []
-        for i, info in enumerate(PALETTE_INFO):
-            border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
-            btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], border=border_style, on_click=on_d_palette_click)
-            lbl = ft.Text(info["name"][:1], size=7, weight="bold")
-            d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
+        if isinstance(PALETTE_INFO, list):
+            for i, info in enumerate(PALETTE_INFO):
+                border_style = ft.border.all(2, ft.Colors.BLACK) if i == 0 else None
+                btn = ft.Container(width=22, height=22, bgcolor=info["color"], border_radius=11, data=info["color"], border=border_style, on_click=on_d_palette_click)
+                lbl = ft.Text(info["name"][:1], size=7, weight="bold")
+                d_palette_options.append(ft.Column([btn, lbl], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1))
         
         d_palette_row = ft.Row(controls=d_palette_options, alignment=ft.MainAxisAlignment.CENTER, spacing=6)
         d_line_mode_btn = ft.ElevatedButton(text="✏️ 柵", on_click=on_d_line_mode_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK, shape=ft.RoundedRectangleBorder(radius=6), padding=ft.padding.all(2)))
@@ -934,14 +949,14 @@ def main(page: ft.Page):
         
         def on_d_cell_click(e):
             if dialog_current_mode == "COLOR":
-                e.control.bgcolor = ft.Colors.GREY_100 if e.control.bgcolor == dialog_selected_color else dialog_selected_color
+                e.control.bgcolor = "grey100" if e.control.bgcolor == dialog_selected_color else dialog_selected_color
                 e.control.update()
                 recalculate_dialog_score()
 
         def toggle_d_line(e):
             if dialog_current_mode == "LINE":
                 line_node = e.control.content
-                line_node.bgcolor = ft.Colors.GREY_300 if line_node.bgcolor == ft.Colors.BROWN_700 else ft.Colors.BROWN_700
+                line_node.bgcolor = "grey300" if line_node.bgcolor == "brown700" else "brown700"
                 line_node.update()
                 recalculate_dialog_score()
 
@@ -950,7 +965,7 @@ def main(page: ft.Page):
         idx = 0
         for r in range(ROWS):
             for c in range(COLS):
-                cell_bg = dialog_cell_bgcolors[idx] if idx < len(dialog_cell_bgcolors) else ft.Colors.GREY_100
+                cell_bg = dialog_cell_bgcolors[idx] if idx < len(dialog_cell_bgcolors) else "grey100"
                 cell = ft.Container(content=ft.Text(f"{r * COLS + c + 1}", color=ft.Colors.GREY_400, size=9), alignment=ft.alignment.center, bgcolor=cell_bg, width=D_CELL_W, height=D_CELL_H, left=c * D_CELL_W + D_OFFSET, top=r * D_CELL_H + D_OFFSET, on_click=on_d_cell_click)
                 d_stack.controls.append(cell)
                 d_cell_dict[(r, c)] = cell
@@ -959,7 +974,7 @@ def main(page: ft.Page):
         idx = 0
         for r in range(ROWS + 1):
             for c in range(COLS):
-                line_bg = dialog_horiz_bgcolors[idx] if idx < len(dialog_horiz_bgcolors) else ft.Colors.GREY_300
+                line_bg = dialog_horiz_bgcolors[idx] if idx < len(dialog_horiz_bgcolors) else "grey300"
                 top_pos = r * D_CELL_H - (D_LINE_THICK / 2) + D_OFFSET
                 if r == 0: top_pos = D_OFFSET
                 if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
@@ -972,7 +987,7 @@ def main(page: ft.Page):
         idx = 0
         for c in range(COLS + 1):
             for r in range(ROWS):
-                line_bg = dialog_vert_bgcolors[idx] if idx < len(dialog_vert_bgcolors) else ft.Colors.GREY_300
+                line_bg = dialog_vert_bgcolors[idx] if idx < len(dialog_vert_bgcolors) else "grey300"
                 left_pos = c * D_CELL_W - (D_LINE_THICK / 2) + D_OFFSET
                 if c == 0: left_pos = D_OFFSET
                 if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
@@ -981,6 +996,7 @@ def main(page: ft.Page):
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
+
 
         # =========================================================================
         # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（後半）
