@@ -886,7 +886,7 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-        # 💡 【フリーズ原因の修正】リストから最初の要素（木の家）の色を安全に抽出
+        # 安全にパレットの最初の要素（木の家）の色を抽出
         dialog_current_mode = "COLOR"  
         dialog_selected_color = PALETTE_INFO[0]["color"] if (isinstance(PALETTE_INFO, list) and len(PALETTE_INFO) > 0) else ft.Colors.GREEN_400
 
@@ -914,7 +914,7 @@ def main(page: ft.Page):
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
                 p_col.controls[0].border = None 
-                p_col.controls.update()
+                p_col.controls[0].update()
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             e.control.update()
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
@@ -996,7 +996,8 @@ def main(page: ft.Page):
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
-        # =========================================================================
+
+            # =========================================================================
         # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（後半）
         # =========================================================================
         # 自動点数計算アルゴリズム
@@ -1093,7 +1094,7 @@ def main(page: ft.Page):
                     "vert": [str(d_vert_dict[(c, r)].bgcolor) for c in range(COLS + 1) for r in range(ROWS)],
                     "agri_inputs": updated_agri,
                     "card_inputs": updated_card,
-                    "card_details": board_pack.get("card_details", {"職業":[],"小さい進補":[],"大きい進歩":[]}) if raw_game_data else {"職業":[],"小さい進歩":[],"大きい進歩":[]}
+                    "card_details": board_pack.get("card_details", {"職業":[],"小さい進歩":[],"大きい進歩":[]}) if raw_game_data else {"職業":[],"小さい進歩":[],"大きい進歩":[]}
                 }
                 
                 supabase.table("records").update({
@@ -1102,12 +1103,18 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                page.close(target_dialog)
+                # 💡 自作コンテナを最前面レイヤー（overlay）から削除して閉じる
+                page.overlay.remove(target_dialog)
                 update_all_uis()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 牧場ボードとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
             except Exception as ex:
                 show_alert(f"保存に失敗しました: {ex}")
+
+        def close_dialog_view(e):
+            # 💡 自作コンテナを最前面レイヤー（overlay）から削除して閉じる
+            page.overlay.remove(target_dialog)
+            page.update()
 
         # UIのグリッド構築
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
@@ -1115,36 +1122,52 @@ def main(page: ft.Page):
 
         recalculate_dialog_score()
 
-        # Flet公式の最新ダイアログ仕様（ft.AlertDialog）で構築
-        target_dialog = ft.AlertDialog(
-            title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
-                    total_score_preview,
-                    ft.Divider(height=10),
-                    ft.Text("🚜 牧場盤面ボードとパレット", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                    ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
-                    ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
-                    ft.Text("🌾 資源・家族の数 (数値変更で自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                    agri_grid,
-                    ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                    card_grid,
-                    ft.Divider(height=10),
-                    detail_memo_input
-                ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
-                width=350,
-                height=450
-            ),
-            actions=[
-                ft.TextButton("キャンセル", on_click=lambda e: page.close(target_dialog)),
-                ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
+        # 💡 【バグ解決の核心】Fletのタブ内表示バグを完全回避するためにダイアログ（暗幕コンテナ）を自作
+        dialog_content = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=16, color=ft.Colors.BLACK),
+                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dialog_view, icon_color=ft.Colors.GREY_600)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                total_score_preview,
+                ft.Divider(height=10),
+                ft.Text("🚜 牧場盤面ボードとパレット", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
+                ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
+                ft.Text("🌾 資源・家族の数 (数値変更で自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                agri_grid,
+                ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                card_grid,
+                ft.Divider(height=10),
+                detail_memo_input,
+                ft.Row([
+                    ft.OutlinedButton("キャンセル", on_click=close_dialog_view),
+                    ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+                ], alignment=ft.MainAxisAlignment.END, spacing=10)
+            ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
+            bgcolor=ft.Colors.WHITE,
+            padding=16,
+            border_radius=12,
+            width=380,
+            max_height=600,
+        )
+
+        # 💡 画面全体を覆う半透明黒のフルスクリーンコンテナ
+        target_dialog = ft.Container(
+            content=dialog_content,
+            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+            alignment=ft.alignment.center,
+            expand=True,
+            left=0, top=0,
+            width=page.window_width,
+            height=page.window_height
         )
         
-        # ブラウザ表示でも確実に開く命令
-        page.open(target_dialog)
+        # 💡 page.openを使わず、overlayに直接追加することで100%強制描画させる
+        page.overlay.append(target_dialog)
+        page.update()
+
 
 
 
