@@ -848,30 +848,26 @@ def main(page: ft.Page):
                 )
             page.update()
 
-
     # =========================================================================
-    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半）
+    # 📊 マイページ履歴一覧から、タップして100%確実に直接編集・上書き保存できる詳細ダイアログ（前半）
     # =========================================================================
     def show_record_detail_dialog(record):
         import json
         
-        # クラッシュ防止のための初期値（デフォルト文字列）
-        dialog_cell_bgcolors = ["grey100"] * (ROWS * COLS)
-        dialog_horiz_bgcolors = ["grey300"] * ((ROWS + 1) * COLS)
-        dialog_vert_bgcolors = ["grey300"] * ((COLS + 1) * ROWS)
+        # クラッシュ防止のためのカラー初期値
+        dialog_cell_bgcolors = [ft.Colors.GREY_100] * (ROWS * COLS)
+        dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
+        dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
         
         local_agri = {"小麦": 0, "野菜": 0, "羊": 0, "猪": 0, "牛": 0, "家族の数": 2, "乞食の枚数": 0}
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = str(record.get("memo", "")) if record.get("memo") else ""
 
-        # データの読み込み部分を徹底的に保護
+        # データの読み込み部分を型エラーから徹底保護
         raw_game_data = record.get("game_data", "")
         if raw_game_data:
             try:
-                if isinstance(raw_game_data, str):
-                    board_pack = json.loads(raw_game_data)
-                else:
-                    board_pack = raw_game_data
+                board_pack = json.loads(raw_game_data) if isinstance(raw_game_data, str) else raw_game_data
                 
                 if isinstance(board_pack, dict):
                     if "agri_inputs" in board_pack and isinstance(board_pack["agri_inputs"], dict):
@@ -879,15 +875,15 @@ def main(page: ft.Page):
                     if "card_inputs" in board_pack and isinstance(board_pack["card_inputs"], dict):
                         local_card.update(board_pack["card_inputs"])
                     if "cells" in board_pack and isinstance(board_pack["cells"], list):
-                        dialog_cell_bgcolors = [str(c) for c in board_pack["cells"]]
+                        dialog_cell_bgcolors = board_pack["cells"]
                     if "horiz" in board_pack and isinstance(board_pack["horiz"], list):
-                        dialog_horiz_bgcolors = [str(h) for h in board_pack["horiz"]]
+                        dialog_horiz_bgcolors = board_pack["horiz"]
                     if "vert" in board_pack and isinstance(board_pack["vert"], list):
-                        dialog_vert_bgcolors = [str(v) for v in board_pack["vert"]]
+                        dialog_vert_bgcolors = board_pack["vert"]
             except Exception:
                 pass
 
-        # 独立したパレット状態
+        # 💡 【フリーズ原因の修正】リストから最初の要素（木の家）の色を安全に抽出
         dialog_current_mode = "COLOR"  
         dialog_selected_color = PALETTE_INFO[0]["color"] if (isinstance(PALETTE_INFO, list) and len(PALETTE_INFO) > 0) else ft.Colors.GREEN_400
 
@@ -915,7 +911,7 @@ def main(page: ft.Page):
             dialog_selected_color = e.control.data
             for p_col in d_palette_options: 
                 p_col.controls[0].border = None 
-                p_col.controls[0].update()
+                p_col.controls.update()
             e.control.border = ft.border.all(2, ft.Colors.BLACK)
             e.control.update()
             d_line_mode_btn.style = ft.ButtonStyle(bgcolor=ft.Colors.GREY_300, color=ft.Colors.BLACK)
@@ -950,14 +946,14 @@ def main(page: ft.Page):
         
         def on_d_cell_click(e):
             if dialog_current_mode == "COLOR":
-                e.control.bgcolor = "grey100" if e.control.bgcolor == dialog_selected_color else dialog_selected_color
+                e.control.bgcolor = ft.Colors.GREY_100 if e.control.bgcolor == dialog_selected_color else dialog_selected_color
                 e.control.update()
                 recalculate_dialog_score()
 
         def toggle_d_line(e):
             if dialog_current_mode == "LINE":
                 line_node = e.control.content
-                line_node.bgcolor = "grey300" if line_node.bgcolor == "brown700" else "brown700"
+                line_node.bgcolor = ft.Colors.GREY_300 if line_node.bgcolor == ft.Colors.BROWN_700 else ft.Colors.BROWN_700
                 line_node.update()
                 recalculate_dialog_score()
 
@@ -966,7 +962,7 @@ def main(page: ft.Page):
         idx = 0
         for r in range(ROWS):
             for c in range(COLS):
-                cell_bg = dialog_cell_bgcolors[idx] if idx < len(dialog_cell_bgcolors) else "grey100"
+                cell_bg = dialog_cell_bgcolors[idx] if idx < len(dialog_cell_bgcolors) else ft.Colors.GREY_100
                 cell = ft.Container(content=ft.Text(f"{r * COLS + c + 1}", color=ft.Colors.GREY_400, size=9), alignment=ft.alignment.center, bgcolor=cell_bg, width=D_CELL_W, height=D_CELL_H, left=c * D_CELL_W + D_OFFSET, top=r * D_CELL_H + D_OFFSET, on_click=on_d_cell_click)
                 d_stack.controls.append(cell)
                 d_cell_dict[(r, c)] = cell
@@ -975,7 +971,7 @@ def main(page: ft.Page):
         idx = 0
         for r in range(ROWS + 1):
             for c in range(COLS):
-                line_bg = dialog_horiz_bgcolors[idx] if idx < len(dialog_horiz_bgcolors) else "grey300"
+                line_bg = dialog_horiz_bgcolors[idx] if idx < len(dialog_horiz_bgcolors) else ft.Colors.GREY_300
                 top_pos = r * D_CELL_H - (D_LINE_THICK / 2) + D_OFFSET
                 if r == 0: top_pos = D_OFFSET
                 if r == ROWS: top_pos = D_TOTAL_H - D_LINE_THICK - D_OFFSET
@@ -988,7 +984,7 @@ def main(page: ft.Page):
         idx = 0
         for c in range(COLS + 1):
             for r in range(ROWS):
-                line_bg = dialog_vert_bgcolors[idx] if idx < len(dialog_vert_bgcolors) else "grey300"
+                line_bg = dialog_vert_bgcolors[idx] if idx < len(dialog_vert_bgcolors) else ft.Colors.GREY_300
                 left_pos = c * D_CELL_W - (D_LINE_THICK / 2) + D_OFFSET
                 if c == 0: left_pos = D_OFFSET
                 if c == COLS: left_pos = D_TOTAL_W - D_LINE_THICK - D_OFFSET
@@ -997,8 +993,7 @@ def main(page: ft.Page):
                 d_stack.controls.append(hit_box)
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
-
-            # =========================================================================
+        # =========================================================================
         # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（後半）
         # =========================================================================
         # 自動点数計算アルゴリズム
@@ -1013,18 +1008,18 @@ def main(page: ft.Page):
             while queue:
                 curr_r, curr_c = queue.pop(0)
                 if curr_r > -1 and curr_r < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
-                    if str(d_horiz_dict[(curr_r, curr_c)].bgcolor) != "brown700":
+                    if d_horiz_dict[(curr_r, curr_c)].bgcolor != ft.Colors.BROWN_700:
                         if not visited[(curr_r - 1, curr_c)]: visited[(curr_r - 1, curr_c)] = True; queue.append((curr_r - 1, curr_c))
                 if curr_r < ROWS and curr_r + 1 < ROWS + 1 and curr_c >= 0 and curr_c < COLS:
-                    if str(d_horiz_dict[(curr_r + 1, curr_c)].bgcolor) != "brown700":
+                    if d_horiz_dict[(curr_r + 1, curr_c)].bgcolor != ft.Colors.BROWN_700:
                         if not visited[(curr_r + 1, curr_c)]: visited[(curr_r + 1, curr_c)] = True; queue.append((curr_r + 1, curr_c))
                 if curr_c > -1 and curr_c < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
-                    if str(d_vert_dict[(curr_c, curr_r)].bgcolor) != "brown700":
+                    if d_vert_dict[(curr_c, curr_r)].bgcolor != ft.Colors.BROWN_700:
                         if not visited[(curr_r, curr_c - 1)]: visited[(curr_r, curr_c - 1)] = True; queue.append((curr_r, curr_c - 1))
                 if curr_c < COLS and curr_c + 1 < COLS + 1 and curr_r >= 0 and curr_r < ROWS:
-                    if str(d_vert_dict[(curr_c + 1, curr_r)].bgcolor) != "brown700":
+                    if d_vert_dict[(curr_c + 1, curr_r)].bgcolor != ft.Colors.BROWN_700:
                         if not visited[(curr_r, curr_c + 1)]: visited[(curr_r, curr_c + 1)] = True; queue.append((curr_r, curr_c + 1))
-            u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and str(d_cell_dict[(r, c)].bgcolor) == "grey100")
+            u_count = sum(1 for r in range(ROWS) for c in range(COLS) if visited[(r, c)] and d_cell_dict[(r, c)].bgcolor == ft.Colors.GREY_100)
             r_count, s_count = 0, 0
             for r in range(ROWS):
                 for c in range(COLS):
@@ -1032,11 +1027,11 @@ def main(page: ft.Page):
                         r_count += 1; i_q = [(r, c)]; visited[(r, c)] = True; has_s = False
                         while i_q:
                             cr, cc = i_q.pop(0)
-                            if str(d_cell_dict[(cr, cc)].bgcolor) == "lightblue300": has_s = True
-                            if cr > 0 and str(d_horiz_dict[(cr, cc)].bgcolor) != "brown700" and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
-                            if cr < ROWS - 1 and str(d_horiz_dict[(cr + 1, cc)].bgcolor) != "brown700" and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
-                            if cc > 0 and str(d_vert_dict[(cc, cr)].bgcolor) != "brown700" and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
-                            if cc < COLS - 1 and str(d_vert_dict[(cc + 1, cr)].bgcolor) != "brown700" and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
+                            if d_cell_dict[(cr, cc)].bgcolor == ft.Colors.LIGHT_BLUE_300: has_s = True
+                            if cr > 0 and d_horiz_dict[(cr, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr - 1, cc)]: visited[(cr - 1, cc)] = True; i_q.append((cr - 1, cc))
+                            if cr < ROWS - 1 and d_horiz_dict[(cr + 1, cc)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr + 1, cc)]: visited[(cr + 1, cc)] = True; i_q.append((cr + 1, cc))
+                            if cc > 0 and d_vert_dict[(cc, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc - 1)]: visited[(cr, cc - 1)] = True; i_q.append((cr, cc - 1))
+                            if cc < COLS - 1 and d_vert_dict[(cc + 1, cr)].bgcolor != ft.Colors.BROWN_700 and not visited[(cr, cc + 1)]: visited[(cr, cc + 1)] = True; i_q.append((cr, cc + 1))
                         if has_s: s_count += 1
             return r_count, u_count, s_count
 
@@ -1069,7 +1064,7 @@ def main(page: ft.Page):
             c_counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
             for cell in d_cell_dict.values():
                 for info in PALETTE_INFO:
-                    if info["name"] in c_counts and str(cell.bgcolor) == str(info["color"]): c_counts[info["name"]] += 1
+                    if info["name"] in c_counts and cell.bgcolor == info["color"]: c_counts[info["name"]] += 1
             
             r_c, u_c, s_c = analyze_d_grid()
             f_score = -1 if c_counts["畑"]<=1 else (1 if c_counts["畑"]==2 else (2 if c_counts["畑"]==3 else (3 if c_counts["畑"]==4 else 4)))
@@ -1104,17 +1099,12 @@ def main(page: ft.Page):
                     "game_data": json.dumps(new_board_pack)
                 }).eq("id", record["id"]).execute()
 
-                # 自作暗幕ビューを消し去る
-                page.overlay.remove(target_dialog)
+                page.close(target_dialog)
                 update_all_uis()
                 page.overlay.append(ft.SnackBar(ft.Text("🚜 牧場ボードとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
             except Exception as ex:
                 show_alert(f"保存に失敗しました: {ex}")
-
-        def close_dialog_view(e):
-            page.overlay.remove(target_dialog)
-            page.update()
 
         # UIのグリッド構築
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
@@ -1122,52 +1112,36 @@ def main(page: ft.Page):
 
         recalculate_dialog_score()
 
-        # Fletのバグを回避するため、完全に画面全体を覆う暗幕ビューを自作する
-        dialog_content = ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=16, color=ft.Colors.BLACK),
-                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dialog_view, icon_color=ft.Colors.GREY_600)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
-                total_score_preview,
-                ft.Divider(height=10),
-                ft.Text("🚜 牧場盤面ボードとパレット", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
-                ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
-                ft.Text("🌾 資源・家族の数 (数値変更で自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                agri_grid,
-                ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
-                card_grid,
-                ft.Divider(height=10),
-                detail_memo_input,
-                ft.Row([
-                    ft.OutlinedButton("キャンセル", on_click=close_dialog_view),
-                    ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
-                ], alignment=ft.MainAxisAlignment.END, spacing=10)
-            ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
-            bgcolor=ft.Colors.WHITE,
-            padding=16,
-            border_radius=12,
-            width=380,
-            max_height=600,
-        )
-
-        # 最前面レイヤーに固定するためのフルスクリーンのコンテナ
-        target_dialog = ft.Container(
-            content=dialog_content,
-            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
-            alignment=ft.alignment.center,
-            expand=True,
-            left=0, top=0,
-            width=page.window_width,
-            height=page.window_height
+        # Flet公式の最新ダイアログ仕様（ft.AlertDialog）で構築
+        target_dialog = ft.AlertDialog(
+            title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    total_score_preview,
+                    ft.Divider(height=10),
+                    ft.Text("🚜 牧場盤面ボードとパレット", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
+                    ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
+                    ft.Text("🌾 資源・家族の数 (数値変更で自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    agri_grid,
+                    ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    card_grid,
+                    ft.Divider(height=10),
+                    detail_memo_input
+                ], spacing=6, tight=True, scroll=ft.ScrollMode.AUTO),
+                width=350,
+                height=450
+            ),
+            actions=[
+                ft.TextButton("キャンセル", on_click=lambda e: page.close(target_dialog)),
+                ft.ElevatedButton("変更を保存", on_click=save_edited_record, bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE)
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
         )
         
-        # page.dialogを使わず、overlayに直接突っ込んで強制描画させる
-        page.overlay.append(target_dialog)
-        page.update()
-
+        # ブラウザ表示でも確実に開く命令
+        page.open(target_dialog)
 
 
 
