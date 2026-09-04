@@ -112,6 +112,8 @@ def main(page: ft.Page):
     def handle_forgot_check_user(e): pass
     def handle_forgot_reset_password(e): pass
     def save_current_game(e): pass
+    def show_record_detail_dialog(record): pass
+
 
     # 行（Row）を生成する補助関数
     def create_group_input_row(val):
@@ -1416,8 +1418,10 @@ def main(page: ft.Page):
     execute_delete_account = _execute_delete_account
     open_change_group_dialog = _open_change_group_dialog
     handle_save_group_number = _handle_save_group_number
-    # 💡 内部クラッシュ（フリーズ）の罠を完全に解消するためのバインドを追記
+
+    #　💡 内部クラッシュ（フリーズ）の罠を完全に解消するためのバインドを追記
     globals()["show_record_detail_dialog"] = show_record_detail_dialog
+
 
 
     # 各種ダイアログ構造構築
