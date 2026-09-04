@@ -1439,6 +1439,9 @@ def main(page: ft.Page):
     execute_delete_account = _execute_delete_account
     open_change_group_dialog = _open_change_group_dialog
     handle_save_group_number = _handle_save_group_number
+    # 💡 内部クラッシュ（フリーズ）の罠を完全に解消するためのバインドを追記
+    globals()["show_record_detail_dialog"] = show_record_detail_dialog
+
 
     # 各種ダイアログ構造構築
     change_name_dialog = ft.AlertDialog(title=ft.Text("👤 プレイヤー名の変更"), content=ft.Container(content=ft.Column([edit_name_input], spacing=10, tight=True), width=320, height=70), actions=[ft.TextButton("キャンセル", on_click=lambda e: page.close(change_name_dialog)), ft.ElevatedButton("名前を変更", on_click=handle_rename, bgcolor=ft.Colors.BLUE_600, color=ft.Colors.WHITE)], actions_alignment=ft.MainAxisAlignment.END)
