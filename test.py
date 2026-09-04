@@ -841,7 +841,9 @@ def main(page: ft.Page):
                 )
             page.update()
 
-    # ⭕ 定義順の衝突・フリーズを100%回避するため、update_my_records_ui のすぐ直後に配置
+    # =========================================================================
+    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半）
+    # =========================================================================
     def show_record_detail_dialog(record):
         import json
         raw_game_data = record.get("game_data", "")
@@ -851,7 +853,7 @@ def main(page: ft.Page):
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # 独立したパレット状態（インデックス指定で安全に木の家を取得）
+        # 独立したパレット状態
         dialog_current_mode = "COLOR"  
         dialog_selected_color = PALETTE_INFO[0]["color"] 
 
@@ -866,7 +868,7 @@ def main(page: ft.Page):
         dialog_horiz_bgcolors = [ft.Colors.GREY_300] * ((ROWS + 1) * COLS)
         dialog_vert_bgcolors = [ft.Colors.GREY_300] * ((COLS + 1) * ROWS)
 
-        # 💡 記録当時の保存データをローカル配列へ100%完全ロード
+        # 💡 記録当時の保存データをローカル配列へ完全ロード
         if raw_game_data:
             try:
                 board_pack = json.loads(raw_game_data)
@@ -878,8 +880,13 @@ def main(page: ft.Page):
             except Exception: pass
 
         detail_memo_input = ft.TextField(label="対戦メモ", value=local_memo, multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
-        agri_fields = {name: ft.TextField(value=str(val), label=name, width=75, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_agri.items()}
-        card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER) for name, val in local_card.items()}
+        
+        # 💡 各入力フィールドの値を変更した時にリアルタイム再計算を走らせる
+        def on_d_input_change(e):
+            recalculate_dialog_score()
+
+        agri_fields = {name: ft.TextField(value=str(val), label=name, width=75, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=on_d_input_change) for name, val in local_agri.items()}
+        card_fields = {name: ft.TextField(value=str(val), label=name, width=88, height=38, text_size=11, text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER, on_change=on_d_input_change) for name, val in local_card.items()}
         total_score_preview = ft.Text(value=f"合計得点: {record.get('final_score')} 点", size=18, weight="bold", color=ft.Colors.BLUE_700)
 
         # 内蔵パレットの切り替えイベント
@@ -924,12 +931,14 @@ def main(page: ft.Page):
         def on_d_cell_click(e):
             if dialog_current_mode == "COLOR":
                 e.control.bgcolor = ft.Colors.GREY_100 if e.control.bgcolor == dialog_selected_color else dialog_selected_color
+                e.control.update()
                 recalculate_dialog_score()
 
         def toggle_d_line(e):
             if dialog_current_mode == "LINE":
                 line_node = e.control.content
                 line_node.bgcolor = ft.Colors.GREY_300 if line_node.bgcolor == ft.Colors.BROWN_700 else ft.Colors.BROWN_700
+                line_node.update()
                 recalculate_dialog_score()
 
         d_stack = ft.Stack(width=D_TOTAL_W, height=D_TOTAL_H)
@@ -969,7 +978,10 @@ def main(page: ft.Page):
                 d_vert_dict[(c, r)] = v_line
                 idx += 1
 
-        # --- 4. ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム ---
+        # =========================================================================
+        # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（後半）
+        # =========================================================================
+        # ダイアログ内専用の牧場グリッド自動点数計算アルゴリズム
         def analyze_d_grid():
             visited = {(r, c): False for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)}
             queue = []
@@ -1024,8 +1036,15 @@ def main(page: ft.Page):
 
         # ダイアログ盤面＋手入力値の再計算
         def recalculate_dialog_score():
-            t_agri = {k: (int(f.value) if f.value != "" else 0) for k, f in agri_fields.items()}
-            t_card = {k: (int(f.value) if f.value != "" else 0) for k, f in card_fields.items()}
+            t_agri = {}
+            for k, f in agri_fields.items():
+                try: t_agri[k] = int(f.value) if f.value != "" else 0
+                except ValueError: t_agri[k] = 0
+
+            t_card = {}
+            for k, f in card_fields.items():
+                try: t_card[k] = int(f.value) if f.value != "" else 0
+                except ValueError: t_card[k] = 0
             
             c_counts = {"木の家": 0, "レンガの家": 0, "石の家": 0, "畑": 0}
             for cell in d_cell_dict.values():
@@ -1045,18 +1064,19 @@ def main(page: ft.Page):
             total_score_preview.update()
             return new_total, t_agri, t_card
 
-        # --- 5. 修正データのUPDATE処理 ---
+        # --- 修正データのUPDATE処理 ---
         def save_edited_record(e):
             try:
                 final_score, updated_agri, updated_card = recalculate_dialog_score()
                 
+                # 🚜 修正された盤面・柵の色を安全に文字列に変換してパック
                 new_board_pack = {
-                    "cells": [d_cell_dict[(r, c)].bgcolor for r in range(ROWS) for c in range(COLS)],
-                    "horiz": [d_horiz_dict[(r, c)].bgcolor for r in range(ROWS + 1) for c in range(COLS)],
-                    "vert": [d_vert_dict[(c, r)].bgcolor for c in range(COLS + 1) for r in range(ROWS)],
+                    "cells": [str(d_cell_dict[(r, c)].bgcolor) for r in range(ROWS) for c in range(COLS)],
+                    "horiz": [str(d_horiz_dict[(r, c)].bgcolor) for r in range(ROWS + 1) for c in range(COLS)],
+                    "vert": [str(d_vert_dict[(c, r)].bgcolor) for c in range(COLS + 1) for r in range(ROWS)],
                     "agri_inputs": updated_agri,
                     "card_inputs": updated_card,
-                    "card_details": board_pack.get("card_details", {}) if raw_game_data else {"職業":[],"smaller":[],"bigger":[]}
+                    "card_details": board_pack.get("card_details", {"職業":[],"小さい進歩":[],"大きい進歩":[]}) if raw_game_data else {"職業":[],"小さい進歩":[],"大きい進歩":[]}
                 }
                 
                 supabase.table("records").update({
@@ -1066,31 +1086,30 @@ def main(page: ft.Page):
                 }).eq("id", record["id"]).execute()
 
                 page.close(target_dialog) 
-                update_my_records_ui()
-                page.overlay.append(ft.SnackBar(ft.Text("🚜 盤面グラフィックとスコアの変更を上書き保存しました！"), open=True))
+                update_all_uis() # 全体の画面表示を一括更新
+                page.overlay.append(ft.SnackBar(ft.Text("🚜 牧場ボードとスコアの変更を上書き保存しました！"), open=True))
                 page.update()
             except Exception as ex:
                 show_alert(f"保存に失敗しました: {ex}")
 
-        # --- 6. UIのグリッド構築 ---
+        # UIのグリッド構築
         agri_grid = ft.Row(controls=list(agri_fields.values()), wrap=True, spacing=5)
         card_grid = ft.Row(controls=list(card_fields.values()), wrap=True, spacing=5)
 
-        # 💡 初期ロード計算を実行して数値を同期
+        # 初期ロード計算を実行して数値を同期
         recalculate_dialog_score()
 
-        # ⚠️ 【オープン命令の競合クラッシュバグを排除】
         target_dialog = ft.AlertDialog(
             title=ft.Text("📊 スコア履歴の確認・直接編集", weight="bold", size=15),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text(f"📅 対戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
+                    ft.Text(f"📅 对戦日: {record.get('date')}", size=11, color=ft.Colors.GREY_600),
                     total_score_preview,
                     ft.Divider(height=10),
-                    ft.Text("🚜 牧場盤面ボードとパレット（ダイアログ内で独立して編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    ft.Text("🚜 牧場盤面ボードとパレット（メイン同様に編集可能）", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     ft.Container(content=d_control_bar, padding=ft.padding.only(bottom=5)), 
                     ft.Container(content=d_stack, border=ft.border.all(1, ft.Colors.GREY_300), alignment=ft.alignment.center, padding=5),
-                    ft.Text("🌾 資源・家族の数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
+                    ft.Text("🌾 資源・家族の数 (数値を書き換えると自動計算)", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     agri_grid,
                     ft.Text("🃏 カードボーナス点数", size=12, weight="bold", color=ft.Colors.BLUE_GREY_700),
                     card_grid,
@@ -1107,8 +1126,8 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END
         )
         
-        # ⭕ 最新のFlet仕様（競合クラッシュを起こさない安全なオープン命令）
         page.open(target_dialog)
+
 
     # =========================================================================
     # 👤 マイページ設定メニュー（名前変更・パスワード変更・秘密の質問・削除）の実体
