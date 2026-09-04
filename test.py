@@ -846,7 +846,7 @@ def main(page: ft.Page):
             page.update()
 
     # =========================================================================
-    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半）
+    # 📊 マイページ履歴一覧から、タップして直接編集・上書き保存できる詳細ダイアログ（前半・修正版）
     # =========================================================================
     def show_record_detail_dialog(record):
         import json
@@ -857,7 +857,7 @@ def main(page: ft.Page):
         local_card = {"職業": 0, "小さい進歩": 0, "大きい進歩": 0}
         local_memo = record.get("memo", "")
         
-        # 独立したパレット状態
+        # 💡 【バグ修正】PALETTE_INFOはリストなので、[0]番目の要素からcolorを取り出す
         dialog_current_mode = "COLOR"  
         dialog_selected_color = PALETTE_INFO[0]["color"] 
 
@@ -885,7 +885,7 @@ def main(page: ft.Page):
 
         detail_memo_input = ft.TextField(label="対戦メモ", value=local_memo, multiline=True, min_lines=1, max_lines=2, text_size=12, content_padding=6)
         
-        # 💡 各入力フィールドの値を変更した時にリアルタイム再計算を走らせる
+        # 各入力フィールドの値を変更した時にリアルタイム再計算を走らせる
         def on_d_input_change(e):
             recalculate_dialog_score()
 
